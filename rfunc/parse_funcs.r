@@ -1,6 +1,6 @@
 parse.kessler <- function(data){
 
-    kesscore <- data.frame(likert = c("All of the time","Most of the time","Some of the time","A little of the time","None of the time"), value=c(1,2,3,4,5),stringsAsFactors = FALSE)
+    kesscore <- data.frame(likert = c("All of the time","Most of the time","Some of the time","A little of the time","None of the time"), value=c(4,3,2,1,0),stringsAsFactors = FALSE)
     #Grab the kessler 6 headings
     kessler_headers <- kessnames <- grep("_", grep("kessler", names(cpdata), value=TRUE), invert = TRUE, value = TRUE)
 
