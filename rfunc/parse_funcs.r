@@ -1,12 +1,24 @@
 parse.var.yes_no <- data.frame(likert = c("Yes", "No"),
                      value=c(1,0),stringsAsFactors=FALSE)
+
 parse.var.not_sev_mohalf_ned <- data.frame(likert = c("Not at all", "Several days",
                                     "More than half the days",
                                     "Nearly every day"),
                                     value=c(0,0,1,1),stringsAsFactors=FALSE)
+
 parse.var.not_sev_mohalf <- data.frame(likert = c("Not at all", "Several Days",
                                                       "More than half the days"),
                                            value=c(0,0,1),stringsAsFactors=FALSE)
+
+parse.phq.eating <- function(data){
+    lmap <- parse.var.yes_no
+    
+    eating_headers <- c(grep("phq_6", names(data),value=TRUE),grep("phq_7", names(data),value=TRUE),grep("phq_8", names(data),value=TRUE))
+    
+    data <- parse.likert(data=data, header_names=eating_headers, likert_map = lmap)
+    
+    return(data)
+}
 parse.phq.other_anx <- function(data){
     lmap <- parse.var.not_sev_mohalf
     

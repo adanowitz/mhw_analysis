@@ -51,3 +51,17 @@ analysis.phq.other <- function(data){
     
     return(data)
 }
+
+analysis.phq.eating <- function(data){
+    data <- parse.phq.eating(data)
+    eating6_headers <- grep("phq_6", names(data), value=TRUE)
+    
+    
+    data <- data %>% mutate(
+        bulimia = if_else(phq_8 & (rowSums(data[eating6_headers])==3),1,0)
+    )
+    
+    data <- data %>% mutate(
+        bin_eat = if_else((is.na(phq_8)|phq_8==0)& (rowSums(data[eating6_headers])==3),1,0)
+    )
+}
