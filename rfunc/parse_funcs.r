@@ -10,6 +10,15 @@ parse.var.not_sev_mohalf <- data.frame(likert = c("Not at all", "Several Days",
                                                       "More than half the days"),
                                            value=c(0,0,1),stringsAsFactors=FALSE)
 
+parse.pcptsd <- function(data){
+    lmap <- parse.var.yes_no
+    
+    pcptsd_headers <- grep("pcptsd", names(data), value=TRUE)
+    
+    data <- parse.likert(data=data, header_names=pcptsd_headers, likert_map=lmap)
+    
+    return(data)
+}
 parse.phq.eating <- function(data){
     lmap <- parse.var.yes_no
     
