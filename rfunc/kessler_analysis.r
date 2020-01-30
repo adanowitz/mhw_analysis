@@ -9,9 +9,9 @@ analysis.kessler <- function(data){
                        if_else((kessler1+kessler2+kessler3+kessler4+kessler5+
                                 kessler6)>=13, 1 , 0))
     data <- mutate(data,
-                   kesler_moderate =
+                   kessler_moderate =
                        if_else((kessler1+kessler2+kessler3+kessler4+kessler5+
-                                kessler6)>=6, 1 , 0))
+                                kessler6)>=6 & !kessler_major, 1 , 0))
 
     return(data)
 }
