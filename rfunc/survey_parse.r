@@ -1,3 +1,6 @@
+library(dplyr)
+library(tidyr)
+
 mhw.survey.process <- function(path){
 
     data <- load.raw(path)
