@@ -2,6 +2,12 @@ load.raw <- function(path){
 
     #grab the data file and delete SurveyMonkey extra columns
     data <- read.csv(path, header = FALSE, skip=2)
+    
+    #remove sports team question if present
+    if(ncol(data)==89)
+        data[c(31)] <- list(NULL)
+    
+    
     data[c(2:9)] <- list(NULL)
     
                                         #grab the headers

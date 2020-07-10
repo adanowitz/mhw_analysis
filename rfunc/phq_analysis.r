@@ -22,7 +22,7 @@ analysis.phq.depr <- function(data){
                       (rowSums(data[dep_headers[-1:-2]])>=2) &
                        dep_major!=1 &
                        (rowSums(data[dep_headers[1:2]])>=1), 1 ,
-                       dep_major)
+                       0)
                    )
     
     return(data)
@@ -35,7 +35,7 @@ analysis.phq.panic <- function(data){
     panic4_headers <- grep("phq_4", names(data),value=TRUE)
     
     data <- data %>% mutate(
-        panic = if_else(rowSums(data[panic3_headers])==4 | (data[panic3_headers[1]] & rowSums(data[panic4_headers])>=4), 1, 0)
+        panic = if_else(rowSums(data[panic3_headers])==4 & (rowSums(data[panic4_headers])>=4), 1, 0)
     )
     
     return(data)

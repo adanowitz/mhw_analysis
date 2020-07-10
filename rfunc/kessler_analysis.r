@@ -11,7 +11,7 @@ analysis.kessler <- function(data){
     data <- mutate(data,
                    kessler_moderate =
                        if_else((kessler1+kessler2+kessler3+kessler4+kessler5+
-                                kessler6)>=6 & !kessler_major, 1 , 0))
+                                kessler6)>=5 & !kessler_major, 1 , 0))
 
     return(data)
 }

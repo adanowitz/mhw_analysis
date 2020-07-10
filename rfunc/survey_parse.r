@@ -1,7 +1,9 @@
 library(dplyr)
 library(tidyr)
+Sys.setenv(MHW_HOME = "~/mhw_analysis/")
+Sys.setenv(SURVEYH = "table_struct/survey_headers.csv")
 
-mhw.survey.process <- function(path){
+mhw.survey.process <-function(path){
 
     data <- load.raw(path)
     
