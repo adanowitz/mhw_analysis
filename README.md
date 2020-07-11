@@ -1,12 +1,7 @@
 # mhw_analysis
 
-## proc_data.r ##
-Takes in processed data and summarizes screen results by race and gender, and by gender and sexual identity
-
-Returns a list with rows **rg** containing race and gender data; **rgf** race and gender with nas and 100% positive screens (used as a proxy for overly small race/gender groups) filtered out; **gs** with gender and sexuality; and **gsf** which is gs with nas and 100% positive screens filtered out.
-
-## table_struct/survey_headers.csv ##
-Replacement/condensed/informative headers used to replace the survey questions when importing raw survey result csvs
+## mhw_analysis/calpoly_mhw_anon.csv ##
+Anonymized Cal Poly survey data that can be fed through the survey parse script
 
 ## rfunc ##
 This directory contains all of the heavy lifting scripts for calculating screen rates and processing the data
@@ -40,3 +35,14 @@ Contains functions for the pc-ptsd screens
 
 ### multilineheader.r ###
 A basic utility used in loading the survey csv. It takes question headers that are spread across two rows and concatenates them for easier processing.
+
+## table_struct/survey_headers.csv ##
+Replacement/condensed/informative headers used to replace the survey questions when importing raw survey result csvs
+
+## roy_scripts ##
+Sample script developed by Soma Roy as part of stats department office hours to help with basic logistic regression of data
+
+## proc_data.r ##
+Takes in processed data and summarizes screen results by race and gender, and by gender and sexual identity
+
+Returns a list with rows **rg** containing race and gender data; **rgf** race and gender with nas and 100% positive screens (used as a proxy for overly small race/gender groups) filtered out; **gs** with gender and sexuality; and **gsf** which is gs with nas and 100% positive screens filtered out.
