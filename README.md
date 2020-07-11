@@ -27,3 +27,16 @@ When run, this function takes in a path to a csv, then:
    All screen results are appended to the end of the imported data
    
 ### load_raw.r ###
+Reads in the survey csv, zeroes out columns with personal identifying information, and other data collection information. It replaces the survey questions with easier to handle short text headers. This also removes entries from individuals who did not consent, those who responded with a year in program other than 1, 2, or "prefer not to respond", and those didn't complete the first screen question (Kessler q1). It returns this filtered and parsed data.
+
+### kessler_analysis.r ###
+Looks at the Kessler questions and returns screens for major and moderate kessler distress.
+
+### phq_analysis.r ###
+Contains functions for handling the myriad of PHQ screens
+
+### pcptsd_analysis.r ###
+Contains functions for the pc-ptsd screens
+
+### multilineheader.r ###
+A basic utility used in loading the survey csv. It takes question headers that are spread across two rows and concatenates them for easier processing.
