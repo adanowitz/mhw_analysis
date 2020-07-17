@@ -1,0 +1,77 @@
+---
+title: "UniqueSchools"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(stringi)
+library(remotes)
+```
+
+
+
+```{r}
+df = read.csv("../mhw_analysis/undergrad_engineering_mh_COVID19.csv")
+```
+
+
+We will standardize school names to lower case, and try to weed out as many duplicates as we can.
+```{r}
+university = df %>%
+  mutate(university =tolower(as.character(At.which.college.or.university.are.you.currently.enrolled.))) %>%
+  dplyr::select(university)%>%
+  unlist() %>%
+  unique()
+
+university = as.vector(university)
+
+university =university %>%
+  str_replace_all(c("’s" = "","\'s" = "", " of engineering"= "", ","=" ", "-"=" ", "cal state"= "california state", "umass" = "university of massachusetts", "[1234567890]" = "", "open ended response" ="")) %>%
+  unique() 
+
+university= stri_remove_empty(university)
+
+university = str_squish(str_trim(university, side ="both")) %>%
+  unique() 
+
+university_df = data.frame(university = as.character(university), 
+                         public_private = rep(NA, length(university)), 
+                         profit_nonprofit = rep(NA, length(university)), 
+                         us_international = rep(NA, length(university)), 
+                         twoYear_fourYear = rep(NA, length(university)))
+#Translate this school name
+university_df$university[university_df$university == "杜克大学"] = "duke university"
+university_df = university_df %>%
+  unique() %>%
+  arrange(university)
+```
+
+
+
+
+Divide rows evenly amongst people
+```{r}
+#363 / 4 =91.75
+#one person will get an extra row
+university_df1 = university_df[1:91,]
+university_df2 = university_df[(91+1):(91*2),]
+university_df3 = university_df[((91*2)+1):(91*3),]
+university_df4 = university_df[((91*3)+1):363,]
+university_df1
+university_df2
+university_df3
+university_df4
+
+```
+
+
+
+
+```{r}
+write_csv(university_df1, "universityAttributes1.csv")
+write_csv(university_df2, "universityAttributes2.csv")
+write_csv(university_df3, "universityAttributes3.csv")
+write_csv(university_df4, "universityAttributes4.csv")
+```
+
