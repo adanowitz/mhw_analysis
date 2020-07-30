@@ -1,0 +1,291 @@
+---
+title: "Covid Data Pipeline"
+author: "Daniel DeFoe"
+date: "7/20/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+This notebook refactors the code from the rfunc folder.
+```{r}
+source("parse_funcs.r")
+library(tidyverse)
+library(kimisc)
+library(checkmate)
+```
+
+
+## Simulate "load_raw.r"
+** Note: We could use multilineheader.r if we really need** 
+Questions
+- I'm not sure what "sports team question" it refers to getting rid of, or it it exists in the covid data
+- Do we need responedants to have started kessler for this ?
+```{r}
+load.raw <- function(path){
+    #grab the data file and delete SurveyMonkey extra columns
+    data <- read.csv(path, header = FALSE, skip=2)
+    #remove sports team question if present
+    #if(ncol(data)==89)
+    #    data[c(31)] <- list(NULL)
+    data[1] <- list(NULL)
+    data[c(7:14)] <- list(NULL)
+
+    #grab the headers
+    headpath <- file.path("../table_struct/covid_data_headers.csv")
+    headers <- read.csv(headpath)
+    base::names(data) <- base::names(headers)
+    print(head(data))
+    #Check to ensure that they have a correct year in the program, consented to the survey, and at least started Kessler
+    data_cleaned<-subset(data,consent=="Yes, I volunteer, am 18 or older, and am enrolled in an undergraduate engineering program")#& ((year_in_program == "1") | (year_in_program == "2") | (year_in_program=="Prefer not to respond")) & kessler1!="")
+    return(data_cleaned)
+}
+    
+```
+
+
+```{r}
+setwd("~/mhw_analysis/mhw_analysis")
+data = load.raw("undergrad_engineering_mh_COVID19_updated2.csv")
+```
+
+
+## Kessler Analysis
+Questions:
+-how do we want to deal with the missing data
+```{r}
+analysis.kessler <- function(data){
+    data<-parse.kessler(data)
+
+    #add for major mental health
+    data <- mutate(data,
+                   kessler_major =
+                       ifelse((coalesce.na(kessler1,0)+coalesce.na(kessler2,0)+coalesce.na(kessler3,0)+coalesce.na(kessler4,0)+coalesce.na(kessler5,0)+
+                                coalesce.na(kessler6,0))>=13, 1,
+                               ifelse((coalesce.na(kessler1,4)+coalesce.na(kessler2,4)+coalesce.na(kessler3,4)+coalesce.na(kessler4,4)+coalesce.na(kessler5,4)+
+                                coalesce.na(kessler6,4)) < 13, 0, NA))
+                   )
+    data <- mutate(data,
+                   kessler_moderate =
+                     ifelse(kessler_major, 0, 
+                       ifelse((coalesce.na(kessler1,0)+coalesce.na(kessler2,0)+coalesce.na(kessler3,0)+coalesce.na(kessler4,0)+coalesce.na(kessler5,0)+
+                                coalesce.na(kessler6,0))>=5 & !coalesce.na(kessler_major, TRUE), 1 , ifelse((coalesce.na(kessler1,4)+coalesce.na(kessler2,4)+coalesce.na(kessler3,4)+coalesce.na(kessler4,4)+coalesce.na(kessler5,4)+
+                                coalesce.na(kessler6,4)) < 5, 0, NA)
+                              )
+                       )
+                   )
+
+    return(data)
+}
+
+```
+
+
+
+
+```{r}
+data = analysis.kessler(data)
+```
+
+
+
+
+
+## PHQ Analysis
+-NEED TO SET A NUMBER OF NA's which will be 
+```{r}
+analysis.phq.depr <- function(data){
+
+                                        #Grab phq_2a-2i
+    dep_headers <- grep("phq_2", names(data),value=TRUE)
+
+    #Parse the data to replace Likert style scores with 1s if they count and 0s
+    #if they don't
+    data <- parse.phq.dep(data)
+
+    data <- mutate(data,
+                      dep_major = ifelse(
+                      (rowSums(coalesce.na(data[dep_headers[-1:-2]],0))>=5) &
+                       (rowSums(coalesce.na(data[dep_headers[1:2]],0))>=1), 1,
+                      ifelse(rowSums(is.na(data[dep_headers[1:2]])) >= 1 & (rowSums(data[dep_headers[-1:-2]], na.rm = T) + rowSums(is.na(data[dep_headers[-1:-2]]))) >=5, NA, 0)
+                   ))
+
+                   #if_else(
+                    #   rowSums(is.na(data[dep_headers[-1:-2]]))>=2 |
+                     #      rowSums(is.na(data[dep_headers[1:2]]))==2, NA, 0))
+    data <- mutate(data,
+                      dep_other = ifelse(dep_major!=1, ifelse(
+                      (rowSums(coalesce.na(data[dep_headers[-1:-2]], 0))>=2) &
+                       (rowSums(coalesce.na(data[dep_headers[1:2]],0))>=1), 1 ,
+                       ifelse(rowSums(is.na(data[dep_headers[1:2]])) >= 1 & (rowSums(data[dep_headers[-1:-2]], na.rm = T) + rowSums(is.na(data[dep_headers[-1:-2]]))) >=2, NA, 0)), 0
+                   ))
+    
+    return(data)
+}
+
+analysis.phq.panic <- function(data){
+    data <- parse.phq.panic(data)
+    
+    panic3_headers <- grep("phq_3", names(data),value=TRUE)
+    panic4_headers <- grep("phq_4", names(data),value=TRUE)
+
+    data <- data %>% mutate(
+        panic = ifelse(rowSums(coalesce.na(data[panic3_headers],0))==4 & (rowSums(coalesce.na(data[panic4_headers],0))>=4), 1, 
+                       ifelse(rowSums(is.na(data[panic3_headers]))==0, 0, ifelse((rowSums(data[panic4_headers], na.rm = T) + rowSums(is.na(data[panic4_headers]))) >=4,NA, 0)))
+    )
+    
+    return(data)
+}
+
+analysis.phq.other <- function(data){
+    data <- parse.phq.other_anx(data)
+    other_headers <- grep("phq_5", names(data),value=TRUE)
+    data <- data %>% mutate(
+        other_anxiety = ifelse(data[other_headers[1]] & rowSums(data[other_headers[-1]], na.rm = T)>=3, 1, 
+                                ifelse(rowSums(is.na(data[other_headers[1]])) == 0, 0, ifelse((rowSums(data[other_headers], na.rm = T) + rowSums(is.na(data[other_headers]))), NA, 0)))
+    )
+    
+    return(data)
+}
+
+analysis.phq.eating <- function(data){
+    data <- parse.phq.eating(data)
+    eating6_headers <- grep("phq_6", names(data), value=TRUE)
+    
+    data <- data %>% mutate(
+        bulimia = if_else(phq_8 & (rowSums(data[eating6_headers], na.rm = T)==3),1,0)
+    )
+    
+    data <- data %>% mutate(
+        bin_eat = ifelse((is.na(phq_8)|phq_8==0)& (rowSums(data[eating6_headers], na.rm = T)==3),1,
+                          ifelse((is.na(phq_8)|phq_8==0)& (rowSums(data[eating6_headers], na.rm = T) + rowSums(is.na(data[eating6_headers][1:3]))) >= 3, NA, 0)
+    ))
+}
+```
+
+
+```{r}
+data <- analysis.phq.depr(data)
+data <- analysis.phq.panic(data)
+data <- analysis.phq.other(data)
+data <- analysis.phq.eating(data)
+```
+
+
+
+
+
+
+
+
+## PCPTSD Analyasis
+```{r}
+analysis.pcptsd <- function(data){
+    data <- parse.pcptsd(data)
+    ptsd_headers <- grep("pcptsd", names(data), value=TRUE)
+    print(head(data[grep("pcptsd", names(data), value=TRUE)]))
+    print(colnames(data))
+    data <- data %>% mutate(ptsd = ifelse(rowSums(data[ptsd_headers], na.rm = T)>=3,1,
+                                           ifelse(rowSums(data[ptsd_headers], na.rm = T) + rowSums(is.na(data[ptsd_headers])) >=3, NA, 0)))
+    
+}
+```
+
+```{r}
+data = analysis.pcptsd(data)
+```
+
+
+
+
+
+
+```{r}
+mhw.results.summarize <- function(data){
+  race_gender <- with(data, aggregate(list(kessler_major=kessler_major, kessler_moderate=kessler_moderate, dep_major=dep_major, dep_other=dep_other, panic=panic, other_anxiety=other_anxiety,bulimia=bulimia,bin_eat=bin_eat,ptsd=ptsd),list(race=race, gender=gender), mean, na.rm=TRUE))
+
+  race_gender_filtered<-filter_all(.tbl=race_gender,.vars_predicate=all_vars(!is.nan(.) & .!=1))
+
+  #write.csv(x=cp_race_gender_filtered, file="~/mhw_analysis/calpoly_data/cp_race_gender.csv", row.names=FALSE)
+
+  gender_sex <- with(data, aggregate(list(kessler_major=kessler_major, kessler_moderate=kessler_moderate, dep_major=dep_major, dep_other=dep_other, panic=panic, other_anxiety=other_anxiety,bulimia=bulimia,bin_eat=bin_eat,ptsd=ptsd),list(gender=gender, sexuality=sexuality), mean, na.rm=TRUE))
+
+  gender_sex_filtered <- filter_all(.tbl=gender_sex,.vars_predicate=all_vars(!is.nan(.) & .!=1))
+
+  #write.csv(x=cp_gender_sex_filtered, file="~/mhw_analysis/calpoly_data/cp_gender_sex.csv", row.names=FALSE)
+  
+  return(list(rg=race_gender, rgf=race_gender_filtered, gs=gender_sex, gsf=gender_sex_filtered))
+}
+```
+
+
+
+```{r}
+mhw_results = mhw.results.summarize(data)
+mhw_results
+```
+
+
+
+
+
+## Holmes Rahe Analysis
+-What things do you want mapped exactly
+-end relationship to what
+-new roommates to what
+```{r}
+##Create a new_stress variable 
+data = data %>%
+  mutate(death_spouse = as.numeric(ifelse(death_spouse=="", 0, 100))) %>%
+  mutate(end_relationship = ifelse(end_relationship=="",0, 65)) %>%##################
+  mutate(quarentine = ifelse(quarentine=="",0, 65)) %>% ######################
+  mutate(death_family = ifelse(death_family=="",0, 63)) %>%
+  mutate(injury_ill = ifelse(injury_ill=="",0, 53)) %>%
+  mutate(lose_job = ifelse(lose_job=="",0, 47)) %>%
+  mutate(family_hb_change = ifelse(family_hb_change=="",0, 44)) %>%
+  mutate(sexual_dif = ifelse(sexual_dif=="",0, 39)) %>%
+  mutate(new_roommates = ifelse(new_roommates=="",0, 39)) %>%#############
+  mutate(finance_change = ifelse(finance_change=="",0, 38)) %>%
+  mutate(friend_death = ifelse(friend_death=="",0, 37)) %>%
+  mutate(argue_spouse = ifelse(argue_spouse=="",0, 35)) %>%
+  mutate(foreclosure = ifelse(foreclosure=="",0, 30)) %>%
+  mutate(responsible_change = ifelse(responsible_change=="",0, 29)) %>%
+  mutate(cease_school = ifelse(cease_school=="",0, 26)) %>%
+  mutate(living_cond = ifelse(living_cond=="",0, 25)) %>%
+  mutate(hours_conditions = ifelse(hours_conditions=="",0, 20)) %>%
+  mutate(new_school = ifelse(new_school=="",0, 20)) %>%
+  mutate(recreation_change = ifelse(recreation_change=="",0, 19)) %>%
+  mutate(church_change = ifelse(church_change=="",0, 19)) %>%
+  mutate(social_change = ifelse(social_change=="",0, 18)) %>%
+  mutate(take_loan = ifelse(take_loan=="",0, 17)) %>%
+  mutate(sleeping_change = ifelse(sleeping_change=="",0, 16)) %>%
+  mutate(family_gather_change = ifelse(family_gather_change=="",0, 15)) %>%
+  mutate(eating_change = ifelse(eating_change=="",0, 15)) %>%
+  mutate(new_stress = rowSums(.[27:51]))
+  
+```
+
+Function to get the top N stress issues experience. 
+```{r}
+top_n_stressors = function(data, n){
+  data_sub = data %>%
+    select(c("death_spouse":"eating_change")) #Grabs only the changing stress experiences columns
+  
+  data_sub = plyr::ldply(data_sub, function(x) sum(x != 0)) %>% ######change this to !=0 if we change to numeric first
+    rename(experience=.id, freq = V1) %>%
+    arrange(desc(freq)) %>%
+    head(n)
+  
+  return(data_sub)
+}
+
+top_n_stressors(data, 20)
+```
+
+
+
+
+
