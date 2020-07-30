@@ -1,0 +1,60 @@
+---
+title: "CovidUniDataAdd"
+author: "Daniel DeFoe"
+date: "7/24/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Bring back the data to the main file. This will add the new columns. 
+```{r}
+u1 = read.csv("universityAttributes1.csv")
+u2 = read.csv("universityAttributes2.csv")
+u3 = read.csv("universityAttributes3.csv")
+u4 = read.csv("universityAttributes4.csv")
+mainFile = read.csv("undergrad_engineering_mh_COVID19.csv")
+```
+
+
+```{r}
+names(u1)[5] = "twoYear_fourYear" 
+names(u2)[5] = "twoYear_fourYear" 
+names(u2)[5] = "twoYear_fourYear" 
+names(u2)[5] = "twoYear_fourYear" 
+```
+
+```{r}
+uniAll = rbind(u1, u2, u3, u4)
+```
+
+
+
+```{r}
+mainFile[["At.which.college.or.university.are.you.currently.enrolled."]] = tolower(mainFile[["At.which.college.or.university.are.you.currently.enrolled."]])
+```
+
+
+
+```{r}
+uniDataFull = merge(x = uniAll, y = mainFile, by.x = "university",by.y = "At.which.college.or.university.are.you.currently.enrolled.", all.y = TRUE)
+```
+
+```{r}
+uniDataFull
+```
+
+
+
+```{r}
+write.csv(uniDataFull, "undergrad_engineering_mh_COVID19_updated.csv")
+```
+
+
+
+
+
+
+
