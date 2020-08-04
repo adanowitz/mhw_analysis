@@ -42,7 +42,7 @@ Replacement/condensed/informative headers used to replace the survey questions w
 ## roy_scripts ##
 Sample script developed by Soma Roy as part of stats department office hours to help with basic logistic regression of data
 
-## Belief on Grad Regression.r ##
+### roy_scripts/Belief on Grad Regression.r ###
 Runs regression models on factors against a newly coded variable "new_belief" to find associations between mental health and intent to persist (graduation)
 
 ## proc_data.r ##
