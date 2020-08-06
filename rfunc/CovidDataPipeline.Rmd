@@ -16,6 +16,8 @@ source("parse_funcs.r")
 library(tidyverse)
 library(kimisc)
 library(checkmate)
+library(ggplot2)
+library(Hmisc)
 ```
 
 
@@ -40,17 +42,24 @@ load.raw <- function(path){
     base::names(data) <- base::names(headers)
     print(head(data))
     #Check to ensure that they have a correct year in the program, consented to the survey, and at least started Kessler
-    data_cleaned<-subset(data,consent=="Yes, I volunteer, am 18 or older, and am enrolled in an undergraduate engineering program")#& ((year_in_program == "1") | (year_in_program == "2") | (year_in_program=="Prefer not to respond")) & kessler1!="")
+    data_cleaned<-subset(data,(consent=="Yes, I volunteer, am 18 or older, and am enrolled in an undergraduate engineering program") & (instruction_situation!=""))#& ((year_in_program == "1") | (year_in_program == "2") | (year_in_program=="Prefer not to respond")) & kessler1!="")
+    names(data_cleaned)[names(data_cleaned) == "public_private.1"] = "profit_nonprofit"
     return(data_cleaned)
 }
+
+trim <- function (x) gsub("^\\s+|\\s+$", "", x)
     
 ```
 
 
 ```{r}
 setwd("~/mhw_analysis/mhw_analysis")
-data = load.raw("undergrad_engineering_mh_COVID19_updated2.csv")
+data = load.raw("covid_data_final.csv")
+data$public_private = trim(data$public_private)
 ```
+
+
+Our qualifiers let us come out with 867 observations
 
 
 ## Kessler Analysis
@@ -203,6 +212,7 @@ data = analysis.pcptsd(data)
 
 
 
+
 ```{r}
 mhw.results.summarize <- function(data){
   race_gender <- with(data, aggregate(list(kessler_major=kessler_major, kessler_moderate=kessler_moderate, dep_major=dep_major, dep_other=dep_other, panic=panic, other_anxiety=other_anxiety,bulimia=bulimia,bin_eat=bin_eat,ptsd=ptsd),list(race=race, gender=gender), mean, na.rm=TRUE))
@@ -282,8 +292,294 @@ top_n_stressors = function(data, n){
   return(data_sub)
 }
 
-top_n_stressors(data, 20)
+top_n_stressors(data, 30)
 ```
+
+
+
+
+```{r}
+experience_freq = top_n_stressors(data, 50) %>%
+  arrange(desc(freq))
+
+experience_freq$experience = factor(experience_freq$experience, levels = experience_freq$experience)
+
+ggplot(experience_freq, aes(x = experience, y = freq)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1)) + 
+  geom_bar(stat="identity") + 
+  labs(title = "Frequency of Different Experiences Students have had Post-Covid")
+```
+
+
+
+## Count Screenings/Diagnosing
+```{r}
+dim(data)
+```
+
+
+```{r}
+colSums(!is.na(data[,c("kessler_major", "kessler_moderate", "dep_major","dep_other", "panic", "other_anxiety", "bulimia", "bin_eat", "ptsd")]))
+```
+
+
+
+
+
+
+## Stress Score by Demographic Analysis
+```{r}
+#This will be the dataset that we do statistical tests on 
+test_data = data%>%
+  filter(us_international == "us" & profit_nonprofit == "nonprofit" & twoYear_fourYear == 4 & eng_undergrad == "Yes")
+
+```
+
+
+```{r}
+ggplot(test_data, aes(x=new_stress)) +
+  geom_histogram() + 
+  labs(title = "Distribution of New Stress Scores")
+```
+```{r}
+ggplot(test_data, aes(x=new_stress)) +
+  geom_histogram() + 
+  labs(title = "Distribution of New Stress Scores") +
+  facet_grid(gender ~ .)
+```
+
+```{r}
+ggplot(test_data, aes(x=new_stress)) +
+  geom_histogram() + 
+  labs(title = "Distribution of New Stress Scores") +
+  facet_grid(race ~ .)
+```
+
+
+```{r}
+model2 = lm(new_stress ~ gender + age + race + mhw_condition + mhw_in_treatment ,data =test_data)
+summary(model2)
+```
+
+The following function will let us see the distribution of the numeric "new_stress" score by 
+```{r}
+visualize_new_stress_dist = function(data, groups){
+  ggplot(data = data, aes_string(x = groups, y = "new_stress", fill = groups)) + 
+    geom_boxplot() + 
+    labs(title = paste("Distributions of New Stress by ", groups), y="New Stress Score", x = capitalize(groups), fill =capitalize(groups))
+}
+```
+
+
+
+```{r}
+data_sub_gender = test_data %>%
+  filter(gender == "Male" | gender=="Female")
+
+t.test(new_stress ~ gender,data = data_sub_gender)
+visualize_new_stress_dist(data_sub_gender, "gender")
+```
+
+```{r}
+t.test(new_stress ~ public_private,data = data)
+visualize_new_stress_dist(data, "public_private")
+```
+
+
+```{r}
+t.test(new_stress ~ us_international,data = data)
+visualize_new_stress_dist(data, "us_international")
+```
+
+```{r}
+data_sub_mhw_condition= test_data %>%
+  filter(mhw_condition == "Yes" | mhw_condition == "No")
+
+t.test(new_stress ~ mhw_condition,data = data_sub_mhw_condition)
+visualize_new_stress_dist(data_sub_mhw_condition, "mhw_condition")
+```
+
+```{r}
+race_anova = aov(new_stress ~ race, data = test_data)
+summary(race_anova)
+
+TukeyHSD(race_anova)
+visualize_new_stress_dist(test_data, "race")
+```
+Pairwise Significant 
+-Hispanic or Latino-American Indian or Alaska Native  
+- Other (please specify)-American Indian or Alaska Native   
+- Hispanic or Latino-Asian  
+- Other (please specify)-Asian 
+- Other (please specify)-Black or African American   
+- White-Hispanic or Latino   
+- White-Other (please specify)    
+
+```{r}
+sexuality_anova = aov(new_stress ~ sexuality, data = test_data)
+summary(sexuality_anova)
+
+TukeyHSD(sexuality_anova)
+visualize_new_stress_dist(test_data, "sexuality")
+```
+
+```{r}
+year_anova = aov(new_stress ~ year_in_program, data = test_data)
+summary(year_anova)
+
+TukeyHSD(year_anova)
+visualize_new_stress_dist(test_data, "year_in_program")
+```
+
+
+
+## General Analysis of Diagnoses by Demographic
+
+
+
+
+```{r}
+process_grouped = function(data, var){
+  grouped = data %>%
+    group_by_(var) %>%
+    select(c("kessler_major", "kessler_moderate", "dep_major", "dep_other", "panic", "other_anxiety", "bulimia", "bin_eat", "ptsd", "new_stress")) %>%
+    summarise_all(mean, na.rm=TRUE)
+  
+  grouped_diagnosis = grouped %>%
+    select(-new_stress)%>%
+    gather(key = "diagnosis", "proportion", 2:10)
+  
+  grouped_stress = grouped %>%
+    select(var, new_stress)
+  
+  plot1 = ggplot(data = grouped_diagnosis, aes_string(x = var, y = "proportion")) + 
+    geom_bar(aes(fill = diagnosis), position = "dodge", stat="identity") + 
+    theme(axis.text.x = element_text(angle = 45, hjust=1)) + 
+    labs(title = paste("Proportion of respondents of each ", var, " with each MH Diagnosis"), x = capitalize(var), y = "Proportion")
+  
+  print(plot1)
+  
+  plot2 = ggplot(data = grouped_stress, aes_string(x = var, y = "new_stress")) +
+    geom_bar(stat="identity")+ 
+    theme(axis.text.x = element_text(angle = 45, hjust=1)) + 
+    labs(title = paste("Average New Stress of Respondents by  ", var), x = capitalize(var), y = "Average New Stress Score")
+    
+  print(plot2)
+  
+  return(grouped_stress)
+}
+```
+
+```{r}
+process_grouped(data, "race")
+```
+
+
+```{r}
+process_grouped(data, "gender")
+```
+
+```{r}
+process_grouped(data, "sexuality")
+```
+
+```{r}
+process_grouped(data, "public_private")
+```
+
+```{r}
+process_grouped(data, "us_international")
+```
+
+```{r}
+process_grouped(data, "mhw_condition")
+```
+
+```{r}
+process_grouped(data, "mhw_in_treatment")
+```
+
+
+
+```{r}
+data %>%
+  group_by(mhw_condition, mhw_in_treatment) %>%
+  select(c("kessler_major", "kessler_moderate", "dep_major", "dep_other", "panic", "other_anxiety", "bulimia", "bin_eat", "ptsd", "new_stress")) %>%
+  summarise_all(mean, na.rm=TRUE)
+```
+
+
+## Correlations between Covid Expereinces
+```{r}
+firstcol = which(colnames(data)=="death_spouse")
+lastcol = which(colnames(data)=="eating_change")
+covid_experiences = data[, c(firstcol:lastcol)] %>%
+  mutate_all(function(x) ifelse(x!=0, 1, 0))
+cor(covid_experiences)
+```
+
+```{r}
+test_data
+```
+
+
+## Regressions Predicting Covid Experiences
+```{r}
+firstcol = which(colnames(data)=="death_spouse")
+lastcol = which(colnames(data)=="eating_change")
+covid_experiences = names(data[, c(firstcol:lastcol)])
+model_data = test_data %>%
+  select(age, gender, race, sexuality, mhw_condition, c("death_spouse":"eating_change")) %>%
+  mutate_each(function(x) ifelse(x!=0, 1, 0), c("death_spouse":"eating_change")) 
+
+
+varnames = names(model_data)[6:30]
+fit = lapply(varnames, 
+    FUN=function(x) glm(formula(paste(x, "~age + race + sexuality + mhw_condition")), family=binomial(link='logit'), data=model_data))
+names(fit) <- varnames
+
+for (m in fit){
+  print(paste("Response of below model is experiencing", names(m$model)[1]))
+  print(summary(m))
+}
+
+```
+
+
+
+
+-Mental health screens vs demographic
+- Stress scores by demographic
+- Deep dive to stress inventory data
+- If someone fills out just the demographic sections, delete -----DONE
+
+
+
+
+Ideas:
+-turn age to a categorical with a range to do similar analysis to other categorical variables
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
