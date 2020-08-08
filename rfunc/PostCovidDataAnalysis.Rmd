@@ -1,0 +1,340 @@
+---
+title: "PostCovidDataAnalysis"
+author: "Daniel DeFoe"
+date: "8/7/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(kimisc)
+library(checkmate)
+library(ggplot2)
+library(Hmisc)
+```
+
+
+```{r}
+data = read.csv("postCovidDataWScreenings.csv")
+```
+
+
+
+## Initial Data Summaries
+Function to get the top N stress issues experience. 
+```{r}
+top_n_stressors = function(data, n){
+  data_sub = data %>%
+    select(c("death_spouse":"eating_change")) #Grabs only the changing stress experiences columns
+  data_sub = data.frame(data_sub)
+  data_sub = plyr::ldply(data.frame(data_sub), function(x) sum(x != 0)) %>% 
+    rename(experience=.id, freq = V1) %>%
+    arrange(desc(freq)) %>%
+    head(n)
+  
+  return(data_sub)
+}
+
+```
+
+
+
+
+```{r}
+experience_freq = top_n_stressors(data, 50) %>%
+  arrange(desc(freq))
+
+experience_freq$experience = factor(experience_freq$experience, levels = experience_freq$experience)
+
+ggplot(experience_freq, aes(x = experience, y = freq)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1)) + 
+  geom_bar(stat="identity") + 
+  labs(title = "Frequency of Different Experiences Students have had Post-Covid")
+```
+
+
+
+Here is the number of screenings we got for each mh condition. 
+
+```{r}
+colSums(!is.na(data[,c("kessler_major", "kessler_moderate", "dep_major","dep_other", "panic", "other_anxiety", "bulimia", "bin_eat", "ptsd")]))
+```
+
+
+
+
+
+
+## Stress Score by Demographic Analysis
+```{r}
+#This will be the dataset that we do statistical tests on unless grouping by us_international,  profit_nonprofit or twoYear_fourYear
+test_data = data%>%
+  filter(us_international == "us" & profit_nonprofit == "nonprofit" & twoYear_fourYear == 4 & eng_undergrad == "Yes")
+
+```
+
+Distribution of all new stress scores. 
+```{r}
+ggplot(test_data, aes(x=new_stress)) +
+  geom_histogram() + 
+  labs(title = "Distribution of New Stress Scores")
+```
+
+
+Distribution of new stress scores by gender. 
+```{r}
+ggplot(test_data, aes(x=new_stress)) +
+  geom_histogram() + 
+  labs(title = "Distribution of New Stress Scores By Gender") +
+  facet_grid(gender ~ .) +
+  theme(strip.text.y = element_text(size=6, angle=0))
+```
+
+Distribution of all new stress scores by race. 
+```{r}
+ggplot(test_data, aes(x=new_stress)) +
+  geom_histogram() + 
+  labs(title = "Distribution of New Stress Scores By Race") +
+  facet_grid(race ~ .)+
+  theme(strip.text.y = element_text(size=6, angle=0))
+```
+
+A linear regression model predicting new stress with some demographic variables. (using only 4 year, us, nonprofits)
+```{r}
+model = lm(new_stress ~ gender + age + race + mhw_condition + mhw_in_treatment ,data =test_data)
+summary(model)
+```
+
+
+
+
+The following function will let us see the distribution of the numeric "new_stress" score by a grouping variable of our choice.
+```{r}
+visualize_new_stress_dist = function(data, groups){
+  ggplot(data = data, aes_string(x = groups, y = "new_stress", fill = groups)) + 
+    geom_boxplot() + 
+    theme(axis.text.x = element_text(angle = 45, hjust=1)) + 
+    labs(title = paste("Distributions of New Stress by ", groups), y="New Stress Score", x = capitalize(groups), fill =capitalize(groups))
+}
+```
+
+
+
+```{r}
+data_sub_gender = test_data %>%
+  filter(gender == "Male" | gender=="Female")
+
+t.test(new_stress ~ gender,data = data_sub_gender)
+visualize_new_stress_dist(data_sub_gender, "gender")
+```
+
+
+The p-value suggests that there is not evidence of a significant difference in new stress between males and females.
+
+
+```{r}
+t.test(new_stress ~ public_private,data = data)
+visualize_new_stress_dist(data, "public_private")
+```
+
+The p-value suggests that there is strong evidence of a significant difference in new stress between students at public and private schools.
+
+
+```{r}
+t.test(new_stress ~ us_international,data = data)
+visualize_new_stress_dist(data, "us_international")
+```
+
+The p-value suggests that there is strong evidence of a significant difference in new stress between students at in the US and international students.
+
+
+
+```{r}
+data_sub_mhw_condition= test_data %>%
+  filter(mhw_condition == "Yes" | mhw_condition == "No")
+
+t.test(new_stress ~ mhw_condition,data = data_sub_mhw_condition)
+visualize_new_stress_dist(data_sub_mhw_condition, "mhw_condition")
+```
+
+
+The p-value suggests that there is strong evidence of a significant difference in new stress between students with and without mh conditions.
+
+
+
+```{r}
+race_anova = aov(new_stress ~ race, data = test_data)
+summary(race_anova)
+
+TukeyHSD(race_anova)
+visualize_new_stress_dist(test_data, "race")
+```
+
+Pairwise Significant 
+-Hispanic or Latino-American Indian or Alaska Native  
+- Other (please specify)-American Indian or Alaska Native   
+- Hispanic or Latino-Asian  
+- Other (please specify)-Asian 
+- Other (please specify)-Black or African American   
+- White-Hispanic or Latino   
+- White-Other (please specify)    
+
+```{r}
+sexuality_anova = aov(new_stress ~ sexuality, data = test_data)
+summary(sexuality_anova)
+
+TukeyHSD(sexuality_anova)
+visualize_new_stress_dist(test_data, "sexuality")
+```
+
+Nothing was significant here.
+
+
+```{r}
+year_anova = aov(new_stress ~ year_in_program, data = test_data)
+summary(year_anova)
+
+TukeyHSD(year_anova)
+visualize_new_stress_dist(test_data, "year_in_program")
+```
+
+Very little evidence of any significant differences here. 
+
+
+## General Analysis of Diagnoses by Demographic
+
+This gives an output analyzing the different screenings by a chosen demographic. 
+```{r}
+process_grouped = function(data, var){
+  grouped = data %>%
+    group_by_(var) %>%
+    select(c("kessler_major", "kessler_moderate", "dep_major", "dep_other", "panic", "other_anxiety", "bulimia", "bin_eat", "ptsd", "new_stress")) %>%
+    summarise_all(mean, na.rm=TRUE)
+  
+  grouped_diagnosis = grouped %>%
+    select(-new_stress)%>%
+    gather(key = "diagnosis", "proportion", 2:10)
+  
+  grouped_stress = grouped %>%
+    select(var, new_stress)
+  
+  plot1 = ggplot(data = grouped_diagnosis, aes_string(x = var, y = "proportion")) + 
+    geom_bar(aes(fill = diagnosis), position = "dodge", stat="identity") + 
+    theme(axis.text.x = element_text(angle = 45, hjust=1)) + 
+    labs(title = paste("Proportion of respondents of each ", var, " with each MH Diagnosis"), x = capitalize(var), y = "Proportion")
+  
+  print(plot1)
+  
+  plot2 = ggplot(data = grouped_stress, aes_string(x = var, y = "new_stress")) +
+    geom_bar(stat="identity")+ 
+    theme(axis.text.x = element_text(angle = 45, hjust=1)) + 
+    labs(title = paste("Average New Stress of Respondents by  ", var), x = capitalize(var), y = "Average New Stress Score")
+    
+  print(plot2)
+  
+  return(grouped_stress)
+}
+```
+
+```{r message=FALSE}
+process_grouped(data, "race")
+```
+
+
+```{r}
+process_grouped(data, "gender")
+```
+
+```{r}
+process_grouped(data, "sexuality")
+```
+
+```{r}
+process_grouped(data, "public_private")
+```
+
+```{r}
+process_grouped(data, "us_international")
+```
+
+```{r}
+process_grouped(data, "mhw_condition")
+```
+
+```{r}
+process_grouped(data, "mhw_in_treatment")
+```
+
+
+
+```{r}
+data %>%
+  group_by(mhw_condition, mhw_in_treatment) %>%
+  select(c("kessler_major", "kessler_moderate", "dep_major", "dep_other", "panic", "other_anxiety", "bulimia", "bin_eat", "ptsd", "new_stress")) %>%
+  summarise_all(mean, na.rm=TRUE)
+```
+
+
+## Correlations between Covid Expereinces
+Correlation matrix of covid stress experiences.
+```{r}
+firstcol = which(colnames(data)=="death_spouse")
+lastcol = which(colnames(data)=="eating_change")
+covid_experiences = data[, c(firstcol:lastcol)] %>%
+  mutate_all(function(x) ifelse(x!=0, 1, 0))
+cor(covid_experiences)
+```
+
+
+
+## Regressions Predicting Covid Experiences
+```{r message=FALSE}
+firstcol = which(colnames(data)=="death_spouse")
+lastcol = which(colnames(data)=="eating_change")
+covid_experiences = names(data[, c(firstcol:lastcol)])
+model_data = test_data %>%
+  select(age, gender, race, sexuality, mhw_condition, c("death_spouse":"eating_change")) %>%
+  mutate_each(function(x) ifelse(x!=0, 1, 0), c("death_spouse":"eating_change")) 
+
+
+varnames = names(model_data)[6:30]
+fit = lapply(varnames, 
+    FUN=function(x) glm(formula(paste(x, "~age + race + sexuality + mhw_condition")), family=binomial(link='logit'), data=model_data))
+names(fit) <- varnames
+
+for (m in fit){
+  print(paste("Response of below model is experiencing", names(m$model)[1]))
+  print(summary(m))
+}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
