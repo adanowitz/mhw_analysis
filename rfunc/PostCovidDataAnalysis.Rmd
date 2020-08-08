@@ -22,6 +22,17 @@ library(Hmisc)
 data = read.csv("postCovidDataWScreenings.csv")
 ```
 
+```{r}
+data$gender = relevel(data$gender, "Male")
+data$race= relevel(data$race, "White")
+data$public_private = relevel(data$public_private, "public")
+data$sexuality = relevel(data$sexuality, "Heterosexual")
+data$gender = relevel(data$gender, "Male")
+data$us_international = relevel(data$us_international, "us")
+data$armed_forces = relevel(data$armed_forces, "No")
+data$parents_edu = relevel(data$parents_edu, "Bachelor’s degree")
+```
+
 
 
 ## Initial Data Summaries
