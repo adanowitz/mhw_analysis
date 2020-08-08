@@ -1,0 +1,529 @@
+---
+title: "Comparing Y1.5 MHW Screens and Y1 Screens"
+date: "8/7/2020"
+output: html_document
+---
+
+```{r include=FALSE}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+library(tidyverse)
+library(gridExtra)
+library(readxl)
+library(plyr)
+```
+
+### Goal
+Compare Y1.5 mhw screens (during Covid) vs Y1 screens (preCovid) for significant differences
+
+```{r warning=FALSE, include=FALSE}
+Daytona <- read_excel("ERAU Daytona COVID-19 Collection Characterizing Engineering Student Me.xlsx")
+
+Prescott <- read_excel("ERAU Prescott COVID-19 Collection Characterizing Engineering Student M.xlsx")
+
+Iowa <- read_excel("Iowa State COVID 19 Collection Characterizing Engineering Student Ment.xlsx")
+
+SDSU <- read_excel("SDSU COVID-19 Collection Characterizing Engineering Student Mental Wel.xlsx")
+
+SJSU <- read_excel("SJSU COVID-19 Collection Characterizing Engineering Student Mental Wel.xlsx")
+
+T15 <- read_excel("T1.5 Characterizing Engineering Student Mental Wellness and Its Role i.xlsx")
+
+Milwaukee <- read_excel("UW Milwaukee COVID 19 Collection Characterizing Engineering Student Me (1).xlsx") 
+
+Boulder <- read_excel("CU Boulder COVID-19 Collection Characterizing Engineering Student Ment (1).xlsx")
+```
+
+```{r include=FALSE}
+#combine the data sets
+dataset <- rbind(Daytona, Prescott,Iowa,SDSU,SJSU,T15,Milwaukee,Boulder)
+```
+
+```{r include=FALSE}
+#take out those who decline to participate 
+#during covid data 
+covid <- dataset[-c(91,101,159,179),]
+```
+
+```{r include=FALSE}
+#precovid data 
+precovid <- read_excel("precovid.xls")
+```
+
+```{r include=FALSE}
+#random sample from precovid data to match the sample size from the covid data
+set.seed(1)
+precovid <- sample_n(precovid, 225)
+```
+
+### Analysis
+***Correlation Methods***
+
+Kendall’s Tau coefficient assesses statistical associations based on the ranks of the data. 
+The Pearson correlation measures the strength and direction of a linear relationship between two variables. I decided to use the Kendall method because the data is ranked as strongly disagree to agree, or none of the time to all of the time. However, we can only see the confidence interval if using Pearson. Using Kendall does produce a higher correlation, but only by a very small amount. Therefore, I will show both. 
+
+A value closer to 0 suggests a weak relationship between the variables. A low correlation (-0.2 < x < 0.2) probably suggests that much of variation of the response variable (Y) is unexplained by the predictor (X), in which case, we should probably look for better explanatory variables.
+
+***Linear Regression***
+
+Linear regression is used to predict the value of an outcome variable Y based on one or more input predictor variables X.
+
+***Confidence Intervals***
+
+If repeated samples were taken and the 95% confidence interval was computed for each sample, 95% of the intervals would contain the population mean. A 95% confidence interval has a 0.95 probability of containing the population mean. 95% of the population distribution is contained in the confidence interval.
+
+#### Belief in Graduating with Engineering Before and During Covid
+```{r echo=FALSE, warning=FALSE}
+#change values to numeric so can do correlations
+precovid$belief_in_grad <- revalue(precovid$belief_in_grad, c("3 (neither agree nor disagree)"=3))
+precovid$belief_in_grad <- revalue(precovid$belief_in_grad, c("5 (strongly agree)"=5))
+precovid$belief_in_grad <- revalue(precovid$belief_in_grad, c("1 (strongly disagree)"=1))
+
+precovid$belief_in_grad <- as.numeric(precovid$belief_in_grad)
+
+covid$belief_in_grad <- revalue(covid$belief_in_grad, c("3 (neither agree nor disagree)"=3))
+covid$belief_in_grad <- revalue(covid$belief_in_grad, c("5 (strongly agree)"=5))
+covid$belief_in_grad <- revalue(covid$belief_in_grad, c("1 (strongly disagree)"=1)) 
+
+covid$belief_in_grad <- as.numeric(covid$belief_in_grad)
+
+#Change prefer not to respond to NA
+precovid[precovid == "Prefer not to respond"] <- NA
+
+covid[covid == "Prefer not to respond"] <- NA
+
+#correlation between belief in graduating with engineering before covid and during covid and confidence intervals
+cor.test(precovid$belief_in_grad, covid$belief_in_grad,method=c("kendall"))
+cor.test(precovid$belief_in_grad, covid$belief_in_grad)
+
+#linear regression
+#belief in graduating with engineering DURING covid is the response(y) variable and BEFORE covid is the predictor (x) variable
+linear_model <- lm(covid$belief_in_grad ~ precovid$belief_in_grad)
+
+summary(linear_model)
+
+#Bar chart to visually see it
+ggplot(mapping=aes(x=belief_in_grad)) + geom_histogram(data = precovid,aes(x=belief_in_grad-0.1), fill = "red", binwidth =0.1) + geom_histogram(data = covid, fill = "blue", binwidth =0.1) + scale_x_continuous(breaks = c(1,2,3,4,5)) + labs(title = "Belief in Graduating with Engineering", y = "Number of Responses", x = "Likert Scale", caption = "Red = Before Covid, Blue = During Covid
+1: strongly disagree; 3: neither agree nor disagree; 5: strongly agree")
+
+#important to note there are NA in the data from those who didn't answer or chose not to
+```
+
+95% confidence interval: (-0.12,0.145)
+
+Kendall correlation: 0.037
+
+Pearson correlation: 0.013
+
+Large p-values of 0.55 and 0.85 from the correlations so cannot conclude that the correlation is different from 0.
+
+Large p-value of 0.85 so the linear regression model is not statistically significant and can not be used to predict the response.
+
+#### Being Diagnosed with a Mental Health or Wellness (MHW) Condition Precovid and Feeling Nervous During Covid 
+```{r echo=FALSE, warning=FALSE}
+#kessler1 = nervous: "During the last 30 days, how often did you feel nervous?"
+#mhw_conditon = "Have you been diagnosed with an mental health or wellness (MHW) condition?"
+
+#Rename Yes to 1 and No to 0 so can compute correlations. The data new_precovid will have this new code for mhw_condition
+new_precovid <- precovid %>%
+  select(mhw_condition) %>%
+  mutate(mhw_condition = case_when(mhw_condition == "Yes"~1,
+                            T~0))
+
+#change to numeric so can compute correlations
+covid$kessler1 <- revalue(covid$kessler1, c("None of the time"=1))
+covid$kessler1 <- revalue(covid$kessler1, c("A little of the time"=2))
+covid$kessler1 <- revalue(covid$kessler1, c("Some of the time"=3))
+covid$kessler1 <- revalue(covid$kessler1, c("Most of the time"=4))
+covid$kessler1 <- revalue(covid$kessler1, c("All of the time"=5))
+
+covid$kessler1 <- as.numeric(covid$kessler1)
+
+#correlation test and confidence intervals for two different correlation tests
+cor.test(covid$kessler1, new_precovid$mhw_condition, method = c("kendall"))
+cor.test(covid$kessler1, new_precovid$mhw_condition)
+
+#linear regression
+linear_model1 <- lm(covid$kessler1 ~ precovid$mhw_condition)
+
+summary(linear_model1)
+
+#Bar charts
+ggplot(mapping=aes(x=kessler1)) + geom_histogram(data = covid, fill = "red", stat = "count") + labs(title = "During the last 30 days, how often did you feel nervous?", y = "Number of Responses", x = "Scale", caption = "1: None of the time; 2: A little of the time; 3: Some of the time; 4: Most of the time; 5: All of the time")
+
+ggplot(mapping=aes(x=mhw_condition)) + geom_histogram(data = new_precovid, fill = "blue", stat = "count") + scale_x_continuous(breaks = c(0,1)) + labs(title = "Have you been diagnosed with an mental health or wellness (MHW) condition?", y = "Number of Responses", x = "Yes = 1, No = 0")
+```
+
+95% confidence interval: (-0.13,0.14)
+
+Kendall correlation: 0.008
+
+Pearson correlation: 0.005
+
+Large p-value of 0.9 from the correlation so cannot conclude that the correlation is different from 0.
+
+Large p-value of 0.98 from the linear regression so the linear regression model is not statistically significant and can not be used to predict the response.
+
+#### Being Diagnosed with a Mental Health or Wellness (MHW) Condition Precovid and Feeling Hopeless During Covid 
+```{r echo=FALSE, warning=FALSE}
+#kessler2 = hopeless: "During the last 30 days, how often did you feel hopeless?"
+#mhw_conditon = "Have you been diagnosed with an mental health or wellness (MHW) condition?"
+
+#change to numeric so can compute correlations 
+covid$kessler2 <- revalue(covid$kessler2, c("None of the time"=1))
+covid$kessler2 <- revalue(covid$kessler2, c("A little of the time"=2))
+covid$kessler2 <- revalue(covid$kessler2, c("Some of the time"=3))
+covid$kessler2 <- revalue(covid$kessler2, c("Most of the time"=4))
+covid$kessler2 <- revalue(covid$kessler2, c("All of the time"=5))
+
+covid$kessler2 <- as.numeric(covid$kessler2)
+
+#correlations test and confidence intervals for two different correlation tests
+cor.test(covid$kessler2, new_precovid$mhw_condition,method=c("kendall"))
+cor.test(covid$kessler2, new_precovid$mhw_condition)
+
+#linear regression 
+linear_model2 <- lm(covid$kessler2 ~ precovid$mhw_condition)
+
+summary(linear_model2)
+
+#Bar chart
+ggplot(mapping=aes(x=kessler2)) + geom_histogram(data = covid, fill = "red", stat = "count") + labs(title = "During the last 30 days, how often did you feel hopeless?", y = "Number of Responses", x = "Scale", caption = "1: None of the time; 2: A little of the time; 3: Some of the time; 4: Most of the time; 5: All of the time")
+```
+
+95% confidence interval: (-0.24,0.040)
+
+Kendall correlation: -0.089
+
+Pearson correlation: -0.10
+
+Large p-value of 0.16 from the correlation so cannot conclude that the correlation is different from 0.
+
+Large p-value of 0.173 from the linear regression so the linear regression model is not statistically significant and can not be used to predict the response. 
+
+#### Being Diagnosed with a Mental Health or Wellness (MHW) Condition Precovid and Feeling Restless or Fidgety During Covid 
+```{r echo=FALSE, warning=FALSE}
+#kessler3 =  "During the last 30 days, how often did you feel restless or fidgety?"
+#mhw_conditon = "Have you been diagnosed with an mental health or wellness (MHW) condition?"
+
+#change to numeric so can compute correlations 
+covid$kessler3 <- revalue(covid$kessler3, c("None of the time"=1))
+covid$kessler3 <- revalue(covid$kessler3, c("A little of the time"=2))
+covid$kessler3 <- revalue(covid$kessler3, c("Some of the time"=3))
+covid$kessler3 <- revalue(covid$kessler3, c("Most of the time"=4))
+covid$kessler3 <- revalue(covid$kessler3, c("All of the time"=5))
+
+covid$kessler3 <- as.numeric(covid$kessler3)
+
+#correlations test and confidence intervals for two different correlation tests
+cor.test(covid$kessler3, new_precovid$mhw_condition,method=c("kendall"))
+cor.test(covid$kessler3, new_precovid$mhw_condition)
+
+#linear regression 
+linear_model3 <- lm(covid$kessler3 ~ precovid$mhw_condition)
+
+summary(linear_model3)
+
+#Bar chart
+ggplot(mapping=aes(x=kessler3)) + geom_histogram(data = covid, fill = "red", stat = "count") + labs(title = "During the last 30 days, how often did you feel restless or fidgety?", y = "Number of Responses", x = "Scale", caption = "1: None of the time; 2: A little of the time; 3: Some of the time; 4: Most of the time; 5: All of the time")
+```
+
+95% confidence interval: (-0.17,0.104)
+
+Kendall correlation: -0.024
+
+Pearson correlation: -0.036
+
+Large p-values of 0.62 and 0.71 from the correlations so cannot conclude that the correlation is different from 0.
+
+Large p-value of 0.54 from the linear regression so the linear regression model is not statistically significant and can not be used to predict the response.
+
+#### Being Diagnosed with a Mental Health or Wellness (MHW) Condition Precovid and Feeling so Depressed that Nothing could Cheer you Up During Covid 
+```{r echo=FALSE, warning=FALSE}
+#kessler4 =  "During the last 30 days, how often did you feel so depressed that nothing could cheer you up?"
+#mhw_conditon = "Have you been diagnosed with an mental health or wellness (MHW) condition?"
+
+#change to numeric so can compute correlations 
+covid$kessler4 <- revalue(covid$kessler4, c("None of the time"=1))
+covid$kessler4 <- revalue(covid$kessler4, c("A little of the time"=2))
+covid$kessler4 <- revalue(covid$kessler4, c("Some of the time"=3))
+covid$kessler4 <- revalue(covid$kessler4, c("Most of the time"=4))
+covid$kessler4 <- revalue(covid$kessler4, c("All of the time"=5))
+
+covid$kessler4 <- as.numeric(covid$kessler4)
+
+#correlations test and confidence intervals for two different correlation tests
+cor.test(covid$kessler4, new_precovid$mhw_condition,method=c("kendall"))
+cor.test(covid$kessler4, new_precovid$mhw_condition)
+
+#linear regression 
+linear_model4 <- lm(covid$kessler4 ~ precovid$mhw_condition)
+
+summary(linear_model4)
+
+#Bar chart
+ggplot(mapping=aes(x=kessler4)) + geom_histogram(data = covid, fill = "red", stat = "count") + labs(title = "During the last 30 days, how often did you feel so depressed that nothing could cheer you up?", y = "Number of Responses", x = "Scale", caption = "1: None of the time; 2: A little of the time; 3: Some of the time; 4: Most of the time; 5: All of the time")
+```
+
+95% confidence interval: (-0.24,0.040)
+
+Kendall correlation: -0.088
+
+Pearson correlation: -0.10
+
+Large p-values of 0.16 and 0.18 from the correlations so cannot conclude that the correlation is different from 0.
+
+Large p-value of 0.169 from the linear regression so the linear regression model is not statistically significant and can not be used to predict the response.
+
+#### Being Diagnosed with a Mental Health or Wellness (MHW) Condition Precovid and Feeling that Everything was an Effort During Covid 
+```{r echo=FALSE, warning=FALSE}
+#kessler5 =  "During the last 30 days, how often did you feel that everything was an effort?"
+#mhw_conditon = "Have you been diagnosed with an mental health or wellness (MHW) condition?"
+
+#change to numeric so can compute correlations 
+covid$kessler5 <- revalue(covid$kessler5, c("None of the time"=1))
+covid$kessler5 <- revalue(covid$kessler5, c("A little of the time"=2))
+covid$kessler5 <- revalue(covid$kessler5, c("Some of the time"=3))
+covid$kessler5 <- revalue(covid$kessler5, c("Most of the time"=4))
+covid$kessler5 <- revalue(covid$kessler5, c("All of the time"=5))
+
+covid$kessler5 <- as.numeric(covid$kessler5)
+
+#correlations test and confidence intervals for two different correlation tests
+cor.test(covid$kessler5, new_precovid$mhw_condition,method=c("kendall"))
+cor.test(covid$kessler5, new_precovid$mhw_condition)
+
+#linear regression 
+linear_model5 <- lm(covid$kessler5 ~ precovid$mhw_condition)
+
+summary(linear_model5)
+
+#Bar chart
+ggplot(mapping=aes(x=kessler5)) + geom_histogram(data = covid, fill = "red", stat = "count") + labs(title = "During the last 30 days, how often did you feel that everything was an effort?", y = "Number of Responses", x = "Scale", caption = "1: None of the time; 2: A little of the time; 3: Some of the time; 4: Most of the time; 5: All of the time")
+```
+
+95% confidence interval: (-0.25,0.020)
+
+Kendall correlation: -0.11
+
+Pearson correlation: -0.12
+
+Large p-values of 0.09 and 0.08 from the correlation so cannot conclude that the correlation is different from 0.
+
+Large p-value of 0.103 from the linear regression so the linear regression model is not statistically significant and can not be used to predict the response.
+
+#### Being Diagnosed with a Mental Health or Wellness (MHW) Condition Precovid and Feeling Worthless During Covid 
+```{r echo=FALSE, warning=FALSE}
+#kessler6 =  "During the last 30 days, how often did you feel worthless?"
+#mhw_conditon = "Have you been diagnosed with an mental health or wellness (MHW) condition?"
+
+#change to numeric so can compute correlations 
+covid$kessler6 <- revalue(covid$kessler6, c("None of the time"=1))
+covid$kessler6 <- revalue(covid$kessler6, c("A little of the time"=2))
+covid$kessler6 <- revalue(covid$kessler6, c("Some of the time"=3))
+covid$kessler6 <- revalue(covid$kessler6, c("Most of the time"=4))
+covid$kessler6 <- revalue(covid$kessler6, c("All of the time"=5))
+
+covid$kessler6 <- as.numeric(covid$kessler6)
+
+#correlations test and confidence intervals for two different correlation tests
+cor.test(covid$kessler6, new_precovid$mhw_condition,method=c("kendall"))
+cor.test(covid$kessler6, new_precovid$mhw_condition)
+
+#linear regression 
+linear_model6 <- lm(covid$kessler6 ~ precovid$mhw_condition)
+
+summary(linear_model6)
+
+#Bar chart
+ggplot(mapping=aes(x=kessler6)) + geom_histogram(data = covid, fill = "red", stat = "count") + labs(title = "During the last 30 days, how often did you feel worthless?", y = "Number of Responses", x = "Scale", caption = "1: None of the time; 2: A little of the time; 3: Some of the time; 4: Most of the time; 5: All of the time")
+```
+
+95% confidence interval: (-0.19,0.084)
+
+Kendall correlation: -0.041
+
+Pearson correlation: -0.06
+
+Large p-values of 0.43 and 0.53 from the correlation so cannot conclude that the correlation is different from 0.
+
+Large p-value of 0.39 from the linear regression so the linear regression model is not statistically significant and can not be used to predict the response.
+
+#### Screening for Major Psychological Distress from Kessler Instrument and Feeling Nervous
+```{r echo=FALSE, warning=FALSE}
+#kessler1 = nervous: "During the last 30 days, how often did you feel nervous?"
+#kessler_major = "1 for a positive screen for major psychological distress from Kessler instrument"
+
+#change to numeric so can compute correlations
+covid$kessler1 <- as.numeric(covid$kessler1)
+precovid$kessler_major <- as.numeric(precovid$kessler_major)
+
+#correlation test and confidence intervals for two different correlation tests
+cor.test(covid$kessler1, precovid$kessler_major, method = c("kendall"))
+cor.test(covid$kessler1, precovid$kessler_major)
+
+#linear regression
+linear_model1a <- lm(covid$kessler1 ~ precovid$kessler_major)
+
+summary(linear_model1a)
+
+#Bar charts
+ggplot(mapping=aes(x=kessler_major)) + geom_histogram(data = precovid, fill = "blue", stat = "count") + scale_x_continuous(breaks = c(0,1)) + labs(title = "Major Psychological Distress from Kessler Instrument", y = "Number of Responses", x = "Positive = 1, Negative = 0")
+```
+
+95% confidence interval: (0.003,0.28)
+
+Kendall correlation: 0.13
+
+Pearson correlation: 0.14
+
+Small p-values of 0.046 and 0.05 from the correlations so can conclude that the correlations are statistically significant.
+
+Small p-value of 0.046 from the linear regression so the linear regression model is statistically significant and can be used to predict the response. The model is: Nervous = 3.02 + 0.33*kessler screen
+
+#### Screening for Major Psychological Distress from Kessler Instrument and Feeling Hopeless
+```{r echo=FALSE, warning=FALSE}
+#kessler2 = hopeless: "During the last 30 days, how often did you feel hopeless?"
+#kessler_major = "1 for a positive screen for major psychological distress from Kessler instrument"
+
+#change to numeric so can compute correlations
+covid$kessler2 <- as.numeric(covid$kessler2)
+precovid$kessler_major <- as.numeric(precovid$kessler_major)
+
+#correlation test and confidence intervals for two different correlation tests
+cor.test(covid$kessler2, precovid$kessler_major, method = c("kendall"))
+cor.test(covid$kessler2, precovid$kessler_major)
+
+#linear regression
+linear_model2b <- lm(covid$kessler2 ~ precovid$kessler_major)
+
+summary(linear_model2b)
+```
+
+95% confidence interval: (-0.10,0.18)
+
+Kendall correlation: 0.021
+
+Pearson correlation: 0.036
+
+Large p-values of 0.74 and 0.61 from the correlations so cannot conclude that the correlations are different from 0.
+
+Large p-value of 0.61 from the linear regression so the linear regression model is not statistically significant and can not be used to predict the response.
+
+#### Screening for Major Psychological Distress from Kessler Instrument and Feeling Restless or Fidgety
+```{r echo=FALSE, warning=FALSE}
+#kessler3 = "During the last 30 days, how often did you feel restless or fidgety?"
+#kessler_major = "1 for a positive screen for major psychological distress from Kessler instrument"
+
+#change to numeric so can compute correlations
+covid$kessler3 <- as.numeric(covid$kessler3)
+precovid$kessler_major <- as.numeric(precovid$kessler_major)
+
+#correlation test and confidence intervals for two different correlation tests
+cor.test(covid$kessler3, precovid$kessler_major, method = c("kendall"))
+cor.test(covid$kessler3, precovid$kessler_major)
+
+#linear regression
+linear_model3c <- lm(covid$kessler3 ~ precovid$kessler_major)
+
+summary(linear_model3c)
+```
+
+95% confidence interval: (-0.13,0.15)
+
+Kendall correlation: 0.025
+
+Pearson correlation: 0.011
+
+Large p-values of 0.70 and 0.88 from the correlations so cannot conclude that the correlations are different from 0.
+
+Large p-value of 0.88 from the linear regression so the linear regression model is not statistically significant and can not be used to predict the response.
+
+#### Screening for Major Psychological Distress from Kessler Instrument and Feeling so Depressed that Nothing could Cheer you Up
+```{r echo=FALSE, warning=FALSE}
+#kessler4 = "During the last 30 days, how often did you feel so depressed that nothing could cheer you up?"
+#kessler_major = "1 for a positive screen for major psychological distress from Kessler instrument"
+
+#change to numeric so can compute correlations
+covid$kessler4 <- as.numeric(covid$kessler4)
+precovid$kessler_major <- as.numeric(precovid$kessler_major)
+
+#correlation test and confidence intervals for two different correlation tests
+cor.test(covid$kessler4, precovid$kessler_major, method = c("kendall"))
+cor.test(covid$kessler4, precovid$kessler_major)
+
+#linear regression
+linear_model4d <- lm(covid$kessler4 ~ precovid$kessler_major)
+
+summary(linear_model4d)
+```
+
+95% confidence interval: (-0.05,0.23)
+
+Kendall correlation: 0.08
+
+Pearson correlation: 0.09
+
+Large p-values of 0.19 and 0.20 from the correlations so cannot conclude that the correlations are different from 0.
+
+Large p-value of 0.19 from the linear regression so the linear regression model is not statistically significant and can not be used to predict the response.
+
+#### Screening for Major Psychological Distress from Kessler Instrument and Feeling that Everything was an Effort
+```{r echo=FALSE, warning=FALSE}
+#kessler5 = "During the last 30 days, how often did you feel that everything was an effort?"
+#kessler_major = "1 for a positive screen for major psychological distress from Kessler instrument"
+
+#change to numeric so can compute correlations
+covid$kessler5 <- as.numeric(covid$kessler5)
+precovid$kessler_major <- as.numeric(precovid$kessler_major)
+
+#correlation test and confidence intervals for two different correlation tests
+cor.test(covid$kessler5, precovid$kessler_major, method = c("kendall"))
+cor.test(covid$kessler5, precovid$kessler_major)
+
+#linear regression
+linear_model5e <- lm(covid$kessler5 ~ precovid$kessler_major)
+
+summary(linear_model5e)
+```
+
+95% confidence interval: (-0.109,0.17)
+
+Kendall correlation: 0.03
+
+Pearson correlation: 0.03
+
+Large p-value of 0.66 from the correlation so cannot conclude that the correlation is different from 0.
+
+Large p-value of 0.66 from the linear regression so the linear regression model is not statistically significant and can not be used to predict the response.
+
+#### Screening for Major Psychological Distress from Kessler Instrument and Feeling Worthless
+```{r echo=FALSE, warning=FALSE}
+#kessler6 = "During the last 30 days, how often did you feel worthless?"
+#kessler_major = "1 for a positive screen for major psychological distress from Kessler instrument"
+
+#change to numeric so can compute correlations
+covid$kessler6 <- as.numeric(covid$kessler6)
+precovid$kessler_major <- as.numeric(precovid$kessler_major)
+
+#correlation test and confidence intervals for two different correlation tests
+cor.test(covid$kessler6, precovid$kessler_major, method = c("kendall"))
+cor.test(covid$kessler6, precovid$kessler_major)
+
+#linear regression
+linear_model6f <- lm(covid$kessler6 ~ precovid$kessler_major)
+
+summary(linear_model6f)
+```
+
+95% confidence interval: (-0.14,0.14)
+
+Kendall correlation: 0.02
+
+Pearson correlation: 0.002
+
+Large p-values of 0.98 and 0.78 from the correlations so cannot conclude that the correlations are different from 0.
+
+Large p-value of 0.98 from the linear regression so the linear regression model is not statistically significant and can not be used to predict the response.
