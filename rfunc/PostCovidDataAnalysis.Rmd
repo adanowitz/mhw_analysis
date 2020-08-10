@@ -329,6 +329,57 @@ for (m in fit){
 
 
 
+## Analysis of Depression Major or Other
+```{r}
+depression_analysis = function(data, var){
+  grouped = data %>%
+    group_by_(var) %>%
+    select(c("dep_major", "dep_other")) %>%
+    mutate(dep_any = ifelse(dep_major ==1 |dep_other ==1, 1, 0)) %>%
+    summarise_all(mean, na.rm=TRUE)
+  
+  grouped = grouped %>%
+    gather(key = "diagnosis", "proportion", 2:4)
+  
+  plot1 = ggplot(data = grouped, aes_string(x = var, y = "proportion")) + 
+    geom_bar(aes(fill = diagnosis), position = "dodge", stat="identity") + 
+    theme(axis.text.x = element_text(angle = 45, hjust=1)) + 
+    labs(title = paste("Proportion of respondents of each ", var, " with Any Depression Diagnosis"), x = capitalize(var), y = "Proportion")
+  
+  print(plot1)
+  
+  return(grouped)
+
+}
+
+
+```
+
+```{r}
+depression_analysis(data, "race")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
