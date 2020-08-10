@@ -1,0 +1,505 @@
+---
+title: "mhw analysis"
+author: "Rachel Castellino"
+date: "7/27/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup, include=FALSE}
+library(readr)
+library(ggplot2)
+library(cowplot)
+library(dplyr)
+library(readxl)
+library(lattice)
+```
+
+```{r}
+data <- read_csv("survey_data.csv")
+```
+
+```{r}
+data$gender = as.factor(data$gender)
+data$gender = relevel(data$gender, ref = "Male")
+
+data$sexuality = as.factor(data$sexuality)
+data$sexuality = relevel(data$sexuality, ref = "Heterosexual")
+
+data$race = as.factor(data$race)
+data$race = relevel(data$race, ref = "White")
+
+data$major = as.factor(data$major)
+data$major = relevel(data$major, ref = "Mechanical Engineering")
+
+data$parents_edu = as.factor(data$parents_edu)
+data$parents_edu = relevel(data$parents_edu, ref = "Bachelor’s degree")
+
+data$armed_forces = as.factor(data$armed_forces)
+data$armed_forces = relevel(data$armed_forces, ref = "No")
+
+data$international = as.factor(data$international)
+data$international = relevel(data$international, ref = "No")
+
+data$type = as.factor(data$type)
+data$type = relevel(data$type, ref = "public")
+
+data$college = as.factor(data$college)
+data$learning_dis = as.factor(data$learning_dis)
+data$physical_dis = as.factor(data$physical_dis)
+data$mhw_condition = as.factor(data$mhw_condition)
+data$mhw_in_treatment = as.factor(data$mhw_in_treatment)
+```
+
+```{r}
+#single variables
+#testing for r squared and p value - inserting appropriate variable names
+model <- glm(ptsd~gender, data = data, family=binomial(link="logit"))
+#r squared
+(model$null.deviance - model$deviance) / model$null.deviance
+# p value
+pchisq((model$null.deviance - model$deviance), (model$df.null - model$df.residual))
+```
+
+```{r}
+#multiple x variables
+#testing for r squared and p value - inserting appropriate variable names
+model <- glm(ptsd~gender+sexuality, data = data, family=binomial(link="logit"))
+#r squared
+(model$null.deviance - model$deviance) / model$null.deviance
+# p value
+pchisq((model$null.deviance - model$deviance), (model$df.null - model$df.residual))
+```
+
+```{r}
+#multiple y variables
+#testing for r squared and p value - inserting appropriate variable names
+model <- glm(ptsd+panic~gender, data = data, family=binomial(link="logit"))
+#r squared
+(model$null.deviance - model$deviance) / model$null.deviance
+# p value
+pchisq((model$null.deviance - model$deviance), (model$df.null - model$df.residual))
+```
+
+```{r}
+test <- function(var, val){
+  #testing for r squared and p value - inserting appropriate variable names
+  model <- glm(ptsd~var+val, data = data, family=binomial(link="logit"))
+  #r squared
+  r_square <- (model$null.deviance - model$deviance) / model$null.deviance
+  # p value
+  p_val <- pchisq((model$null.deviance - model$deviance), (model$df.null - model$df.residual))
+  return(r_square, p_val)
+}
+```
+
+```{r}
+#individual regression plots for kessler_major
+model <- glm((bulimia|bin_eat) ~ gender+sexuality, data = data, family=binomial(link="logit"))
+#summary(model)
+(model$null.deviance - model$deviance) / model$null.deviance
+pchisq((model$null.deviance - model$deviance), (model$df.null - model$df.residual))
+```
+
+```{r}
+
+model <- glm(kessler_major~sexuality, data = data, family=binomial(link="logit"))
+summary(model)
+(model$null.deviance - model$deviance) / model$null.deviance
+
+model <- glm(kessler_major~race, data = data, family=binomial(link="logit"))
+summary(model)
+(model$null.deviance - model$deviance) / model$null.deviance
+
+model <- glm(kessler_major~major, data = data, family=binomial(link="logit"))
+summary(model)
+(model$null.deviance - model$deviance) / model$null.deviance
+
+model <- glm(kessler_major~learning_dis, data = data, family=binomial(link="logit"))
+summary(model)
+(model$null.deviance - model$deviance) / model$null.deviance
+
+model <- glm(kessler_major~physical_dis, data = data, family=binomial(link="logit"))
+summary(model)
+(model$null.deviance - model$deviance) / model$null.deviance
+
+model <- glm(kessler_major~mhw_condition, data = data, family = binomial(link="logit"))
+summary(model)
+(model$null.deviance - model$deviance) / model$null.deviance
+
+model <- glm(kessler_major~mhw_in_treatment, data = data, family=binomial(link="logit"))
+summary(model)
+(model$null.deviance - model$deviance) / model$null.deviance
+
+model <- glm(model~parents_edu, data = data, family=binomial(link="logit"))
+summary(model)
+(model$null.deviance - model$deviance) / model$null.deviance
+
+model <- glm(model~armed_forces, data = data, family=binomial(link="logit"))
+summary(model)
+(model$null.deviance - model$deviance) / model$null.deviance
+
+model <- glm(kessler_major~international, data = data, family=binomial(link="logit"))
+summary(model)
+(model$null.deviance - model$deviance) / model$null.deviance
+
+model <- glm(kessler_major~college, data = data, family=binomial(link="logit"))
+summary(model)
+(model$null.deviance - model$deviance) / model$null.deviance
+
+model <- glm(kessler_major~type, data = data, family=binomial(link="logit"))
+summary(model)
+(model$null.deviance - model$deviance) / model$null.deviance
+```
+
+```{r}
+#individual regression plots for kessler_moderate
+kmo.gender <- glm(kessler_moderate~gender, data = data, family=binomial(link="logit"))
+summary(kmo.gender)
+(kmo.gender$null.deviance - kmo.gender$deviance) / kmo.gender$null.deviance
+
+kmo.sexuality <- glm(kessler_moderate~sexuality, data = data, family=binomial(link="logit"))
+summary(kmo.sexuality)
+(kmo.sexuality$null.deviance - kmo.sexuality$deviance) / kmo.sexuality$null.deviance
+
+kmo.race <- glm(kessler_moderate~race, data = data, family=binomial(link="logit"))
+summary(kmo.race)
+(kmo.race$null.deviance - kmo.race$deviance) / kmo.race$null.deviance
+
+kmo.major <- glm(kessler_moderate~major, data = data, family=binomial(link="logit"))
+summary(kmo.major)
+(kmo.major$null.deviance - kmo.major$deviance) / kmo.major$null.deviance
+
+kmo.learning_dis <- glm(kessler_moderate~learning_dis, data = data, family=binomial(link="logit"))
+summary(kmo.learning_dis)
+(kmo.learning_dis$null.deviance - kmo.learning_dis$deviance) / kmo.learning_dis$null.deviance
+
+kmo.learning_dis <- glm(kessler_moderate~physical_dis, data = data, family=binomial(link="logit"))
+summary(kmo.physical_dis)
+(kmo.learning_dis$null.deviance - kmo.learning_dis$deviance) / kmo.learning_dis$null.deviance
+
+kmo.mhw_condition <- glm(kessler_moderate~mhw_condition, data = data, family = binomial(link="logit"))
+summary(kmo.mhw_condition)
+(kmo.major$null.deviance - kmo.major$deviance) / kmo.major$null.deviance
+
+kmo.mhw_in_treatment <- glm(kessler_moderate~mhw_in_treatment, data = data, family=binomial(link="logit"))
+summary(kmo.mhw_in_treatment)
+(kmo.major$null.deviance - kmo.major$deviance) / kmo.major$null.deviance
+
+kmo.parents_edu <- glm(kessler_moderate~parents_edu, data = data, family=binomial(link="logit"))
+summary(kmo.parents_edu)
+(kmo.major$null.deviance - kmo.major$deviance) / kmo.major$null.deviance
+
+kmo.armed_forces <- glm(kessler_moderate~armed_forces, data = data, family=binomial(link="logit"))
+summary(kmo.armed_forces)
+(kmo.major$null.deviance - kmo.major$deviance) / kmo.major$null.deviance
+
+kmo.international <- glm(kessler_moderate~international, data = data, family=binomial(link="logit"))
+summary(kmo.international)
+(kmo.major$null.deviance - kmo.major$deviance) / kmo.major$null.deviance
+
+kmo.college <- glm(kessler_moderate~college, data = data, family=binomial(link="logit"))
+summary(kmo.college)
+(kmo.major$null.deviance - kmo.major$deviance) / kmo.major$null.deviance
+
+kmo.type <- glm(kessler_moderate~type, data = data, family=binomial(link="logit"))
+summary(kmo.type)
+(kmo.major$null.deviance - kmo.major$deviance) / kmo.major$null.deviance
+```
+
+```{r}
+#individual regression plots for dep_major
+dma.gender <- glm(dep_major~gender, data = data, family=binomial(link="logit"))
+summary(dma.gender)
+
+dma.sexuality <- glm(dep_major~sexuality, data = data, family=binomial(link="logit"))
+summary(dma.sexuality)
+
+dma.race <- glm(dep_major~race, data = data, family=binomial(link="logit"))
+summary(dma.race)
+
+dma.major <- glm(dep_major~major, data = data, family=binomial(link="logit"))
+summary(dma.major)
+
+dma.learning_dis <- glm(dep_major~learning_dis, data = data, family=binomial(link="logit"))
+summary(dma.learning_dis)
+
+dma.physical_dis <- glm(dep_major~physical_dis, data = data, family=binomial(link="logit"))
+summary(dma.physical_dis)
+
+dma.mhw_condition <- glm(dep_major~mhw_condition, data = data, family = binomial(link="logit"))
+summary(dma.mhw_condition)
+
+dma.mhw_in_treatment <- glm(dep_major~mhw_in_treatment, data = data, family=binomial(link="logit"))
+summary(dma.mhw_in_treatment)
+
+dma.parents_edu <- glm(dep_major~parents_edu, data = data, family=binomial(link="logit"))
+summary(dma.parents_edu)
+
+dma.armed_forces <- glm(dep_major~armed_forces, data = data, family=binomial(link="logit"))
+summary(dma.armed_forces)
+
+dma.international <- glm(dep_major~international, data = data, family=binomial(link="logit"))
+summary(dma.international)
+
+dma.college <- glm(dep_major~college, data = data, family=binomial(link="logit"))
+summary(dma.college)
+
+dma.type <- glm(dep_major~type, data = data, family=binomial(link="logit"))
+summary(dma.type)
+```
+
+```{r}
+#individual regression plots for dep_other
+do.gender <- glm(dep_other~gender, data = data, family=binomial(link="logit"))
+summary(do.gender)
+
+do.sexuality <- glm(dep_other~sexuality, data = data, family=binomial(link="logit"))
+summary(do.sexuality)
+
+do.race <- glm(dep_other~race, data = data, family=binomial(link="logit"))
+summary(do.race)
+
+do.major <- glm(dep_other~major, data = data, family=binomial(link="logit"))
+summary(do.major)
+
+do.learning_dis <- glm(dep_other~learning_dis, data = data, family=binomial(link="logit"))
+summary(do.learning_dis)
+
+do.physical_dis <- glm(dep_other~physical_dis, data = data, family=binomial(link="logit"))
+summary(do.physical_dis)
+
+do.mhw_condition <- glm(dep_other~mhw_condition, data = data, family = binomial(link="logit"))
+summary(do.mhw_condition)
+
+do.mhw_in_treatment <- glm(dep_other~mhw_in_treatment, data = data, family=binomial(link="logit"))
+summary(do.mhw_in_treatment)
+
+do.parents_edu <- glm(dep_other~parents_edu, data = data, family=binomial(link="logit"))
+summary(do.parents_edu)
+
+do.armed_forces <- glm(dep_other~armed_forces, data = data, family=binomial(link="logit"))
+summary(do.armed_forces)
+
+do.international <- glm(dep_other~international, data = data, family=binomial(link="logit"))
+summary(do.international)
+
+do.college <- glm(dep_other~college, data = data, family=binomial(link="logit"))
+summary(do.college)
+
+do.type <- glm(dep_other~type, data = data, family=binomial(link="logit"))
+summary(do.type)
+```
+
+```{r}
+#individual regression plots for panic
+panic.gender <- glm(panic~gender, data = data, family=binomial(link="logit"))
+summary(panic.gender)
+
+panic.sexuality <- glm(panic~sexuality, data = data, family=binomial(link="logit"))
+summary(panic.sexuality)
+
+panic.race <- glm(panic~race, data = data, family=binomial(link="logit"))
+summary(panic.race)
+
+panic.major <- glm(panic~major, data = data, family=binomial(link="logit"))
+summary(panic.major)
+
+panic.learning_dis <- glm(panic~learning_dis, data = data, family=binomial(link="logit"))
+summary(panic.learning_dis)
+
+panic.physical_dis <- glm(panic~physical_dis, data = data, family=binomial(link="logit"))
+summary(panic.physical_dis)
+
+panic.mhw_condition <- glm(panic~mhw_condition, data = data, family = binomial(link="logit"))
+summary(panic.mhw_condition)
+
+panic.mhw_in_treatment <- glm(panic~mhw_in_treatment, data = data, family=binomial(link="logit"))
+summary(panic.mhw_in_treatment)
+
+panic.parents_edu <- glm(panic~parents_edu, data = data, family=binomial(link="logit"))
+summary(panic.parents_edu)
+
+panic.armed_forces <- glm(panic~armed_forces, data = data, family=binomial(link="logit"))
+summary(panic.armed_forces)
+
+panic.international <- glm(panic~international, data = data, family=binomial(link="logit"))
+summary(panic.international)
+
+panic.college <- glm(panic~college, data = data, family=binomial(link="logit"))
+summary(panic.college)
+
+panic.type <- glm(panic~type, data = data, family=binomial(link="logit"))
+summary(panic.type)
+```
+
+```{r}
+#individual regression plots for other_anxiety
+other.gender <- glm(other_anxiety~gender, data = data, family=binomial(link="logit"))
+summary(other.gender)
+
+other.sexuality <- glm(other_anxiety~sexuality, data = data, family=binomial(link="logit"))
+summary(other.sexuality)
+
+other.race <- glm(other_anxiety~race, data = data, family=binomial(link="logit"))
+summary(other.race)
+
+other.major <- glm(other_anxiety~major, data = data, family=binomial(link="logit"))
+summary(other.major)
+
+other.learning_dis <- glm(other_anxiety~learning_dis, data = data, family=binomial(link="logit"))
+summary(other.learning_dis)
+
+other.physical_dis <- glm(other_anxiety~physical_dis, data = data, family=binomial(link="logit"))
+summary(other.physical_dis)
+
+other.mhw_condition <- glm(other_anxiety~mhw_condition, data = data, family = binomial(link="logit"))
+summary(other.mhw_condition)
+
+other.mhw_in_treatment <- glm(other_anxiety~mhw_in_treatment, data = data, family=binomial(link="logit"))
+summary(other.mhw_in_treatment)
+
+other.parents_edu <- glm(other_anxiety~parents_edu, data = data, family=binomial(link="logit"))
+summary(panic.parents_edu)
+
+other.armed_forces <- glm(other_anxiety~armed_forces, data = data, family=binomial(link="logit"))
+summary(other.armed_forces)
+
+other.international <- glm(other_anxiety~international, data = data, family=binomial(link="logit"))
+summary(other.international)
+
+other.college <- glm(other_anxiety~college, data = data, family=binomial(link="logit"))
+summary(other.college)
+
+other.type <- glm(other_anxiety~type, data = data, family=binomial(link="logit"))
+summary(other.type)
+```
+
+```{r}
+#individual regression plots for bulimia
+bulimia.gender <- glm(bulimia~gender, data = data, family=binomial(link="logit"))
+summary(bulimia.gender)
+
+bulimia.sexuality <- glm(bulimia~sexuality, data = data, family=binomial(link="logit"))
+summary(bulimia.sexuality)
+
+bulimia.race <- glm(bulimia~race, data = data, family=binomial(link="logit"))
+summary(bulimia.race)
+
+bulimia.major <- glm(bulimia~major, data = data, family=binomial(link="logit"))
+summary(bulimia.major)
+
+bulimia.learning_dis <- glm(bulimia~learning_dis, data = data, family=binomial(link="logit"))
+summary(bulimia.learning_dis)
+
+bulimia.physical_dis <- glm(bulimia~physical_dis, data = data, family=binomial(link="logit"))
+summary(bulimia.physical_dis)
+
+bulimia.mhw_condition <- glm(bulimia~mhw_condition, data = data, family = binomial(link="logit"))
+summary(bulimia.mhw_condition)
+
+bulimia.mhw_in_treatment <- glm(bulimia~mhw_in_treatment, data = data, family=binomial(link="logit"))
+summary(bulimia.mhw_in_treatment)
+
+bulimia.parents_edu <- glm(bulimia~parents_edu, data = data, family=binomial(link="logit"))
+summary(bulimia.parents_edu)
+
+bulimia.armed_forces <- glm(bulimia~armed_forces, data = data, family=binomial(link="logit"))
+summary(bulimia.armed_forces)
+
+bulimia.international <- glm(bulimia~international, data = data, family=binomial(link="logit"))
+summary(bulimia.international)
+
+bulimia.college <- glm(bulimia~college, data = data, family=binomial(link="logit"))
+summary(bulimia.college)
+
+bulimia.type <- glm(bulimia~type, data = data, family=binomial(link="logit"))
+summary(bulimia.type)
+```
+
+```{r}
+#individual regression plots for ptsd
+ptsd.gender <- glm(ptsd~gender, data = data, family=binomial(link="logit"))
+summary(ptsd.gender)
+
+ptsd.sexuality <- glm(ptsd~sexuality, data = data, family=binomial(link="logit"))
+summary(ptsd.sexuality)
+
+ptsd.race <- glm(ptsd~race, data = data, family=binomial(link="logit"))
+summary(ptsd.race)
+
+ptsd.major <- glm(ptsd~major, data = data, family=binomial(link="logit"))
+summary(ptsd.major)
+
+ptsd.learning_dis <- glm(ptsd~learning_dis, data = data, family=binomial(link="logit"))
+summary(ptsd.learning_dis)
+
+ptsd.physical_dis <- glm(ptsd~physical_dis, data = data, family=binomial(link="logit"))
+summary(ptsd.physical_dis)
+
+ptsd.mhw_condition <- glm(ptsd~mhw_condition, data = data, family = binomial(link="logit"))
+summary(ptsd.mhw_condition)
+
+ptsd.mhw_in_treatment <- glm(ptsd~mhw_in_treatment, data = data, family=binomial(link="logit"))
+summary(ptsd.mhw_in_treatment)
+
+ptsd.parents_edu <- glm(ptsd~parents_edu, data = data, family=binomial(link="logit"))
+summary(ptsd.parents_edu)
+
+ptsd.armed_forces <- glm(ptsd~armed_forces, data = data, family=binomial(link="logit"))
+summary(ptsd.armed_forces)
+
+ptsd.international <- glm(ptsd~international, data = data, family=binomial(link="logit"))
+summary(ptsd.international)
+
+ptsd.college <- glm(ptsd~college, data = data, family=binomial(link="logit"))
+summary(ptsd.college)
+
+ptsd.type <- glm(ptsd~type, data = data, family=binomial(link="logit"))
+summary(ptsd.type)
+```
+
+```{r}
+#individual regression plots for bin_eat
+bin_eat.gender <- glm(bin_eat~gender, data = data, family=binomial(link="logit"))
+summary(bin_eat.gender)
+
+bin_eat.sexuality <- glm(bin_eat~sexuality, data = data, family=binomial(link="logit"))
+summary(bin_eat.sexuality)
+
+bin_eat.race <- glm(bin_eat~race, data = data, family=binomial(link="logit"))
+summary(bin_eat.race)
+
+bin_eat.major <- glm(bin_eat~major, data = data, family=binomial(link="logit"))
+summary(bin_eat.major)
+
+bin_eat.learning_dis <- glm(bin_eat~learning_dis, data = data, family=binomial(link="logit"))
+summary(bin_eat.learning_dis)
+
+bin_eat.physical_dis <- glm(bin_eat~physical_dis, data = data, family=binomial(link="logit"))
+summary(bin_eat.physical_dis)
+
+bin_eat.mhw_condition <- glm(bin_eat~mhw_condition, data = data, family = binomial(link="logit"))
+summary(bin_eat.mhw_condition)
+
+bin_eat.mhw_in_treatment <- glm(bin_eat~mhw_in_treatment, data = data, family=binomial(link="logit"))
+summary(bin_eat.mhw_in_treatment)
+
+bin_eat.parents_edu <- glm(bin_eat~parents_edu, data = data, family=binomial(link="logit"))
+summary(bin_eat.parents_edu)
+
+bin_eat.armed_forces <- glm(bin_eat~armed_forces, data = data, family=binomial(link="logit"))
+summary(bin_eat.armed_forces)
+
+bin_eat.international <- glm(bin_eat~international, data = data, family=binomial(link="logit"))
+summary(bin_eat.international)
+
+bin_eat.college <- glm(bin_eat~college, data = data, family=binomial(link="logit"))
+summary(bin_eat.college)
+
+bin_eat.type <- glm(bin_eat~type, data = data, family=binomial(link="logit"))
+summary(bin_eat.type)
+```
