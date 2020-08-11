@@ -15,6 +15,7 @@ library(kimisc)
 library(checkmate)
 library(ggplot2)
 library(Hmisc)
+library(zoo)
 ```
 
 
@@ -317,11 +318,33 @@ fit = lapply(varnames,
     FUN=function(x) glm(formula(paste(x, "~age + race + sexuality + mhw_condition")), family=binomial(link='logit'), data=model_data))
 names(fit) <- varnames
 
+
+predictor_names = names(which(summary(fit$death_spouse)$coeff[-1,4] >0))
+group_sig_dif = data.frame(predictor = predictor_names, 
+                           Stat_More_Likely = rep("", length(predictor_names)),
+                           Stat_Less_Likely = rep("", length(predictor_names)), 
+                           stringsAsFactors = F)
+
+
 for (m in fit){
   print(paste("Response of below model is experiencing", names(m$model)[1]))
-  print(summary(m))
-}
+  test_sum = summary(m)
+  print(test_sum)
 
+  more_likely = names(which(test_sum$coeff[-1,4] < 0.05 & test_sum$coeff[-1,1] > 0))
+  less_likely = names(which(test_sum$coeff[-1,4] < 0.05 & test_sum$coeff[-1,1] < 0))
+  for (v in more_likely){
+    group_sig_dif$Stat_More_Likely[group_sig_dif$predictor == v] = paste(group_sig_dif$Stat_More_Likely[group_sig_dif$predictor == v],",", names(m$model)[1])
+  }
+  
+  for (v in less_likely){
+    group_sig_dif$Stat_Less_Likely[group_sig_dif$predictor == v] = paste(group_sig_dif$Stat_Less_Likely[group_sig_dif$predictor == v],",", names(m$model)[1])
+  }
+  
+}
+group_sig_dif$Stat_More_Likely =gsub("^.{0,2}", "", group_sig_dif$Stat_More_Likely)
+group_sig_dif$Stat_Less_Likely =gsub("^.{0,2}", "", group_sig_dif$Stat_Less_Likely)
+group_sig_dif
 ```
 
 
