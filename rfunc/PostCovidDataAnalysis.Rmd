@@ -16,6 +16,7 @@ library(checkmate)
 library(ggplot2)
 library(Hmisc)
 library(zoo)
+library(stats)
 ```
 
 
@@ -28,7 +29,6 @@ data$gender = relevel(data$gender, "Male")
 data$race= relevel(data$race, "White")
 data$public_private = relevel(data$public_private, "public")
 data$sexuality = relevel(data$sexuality, "Heterosexual")
-data$gender = relevel(data$gender, "Male")
 data$us_international = relevel(data$us_international, "us")
 data$armed_forces = relevel(data$armed_forces, "No")
 data$parents_edu = relevel(data$parents_edu, "Bachelor’s degree")
@@ -37,6 +37,89 @@ data$parents_edu = relevel(data$parents_edu, "Bachelor’s degree")
 
 
 ## Initial Data Summaries
+Demographic breakdown is as follows. 
+Race
+```{r}
+data %>% 
+  group_by(race) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+Gender
+```{r}
+data %>% 
+  group_by(gender) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+Sexuality
+```{r}
+data %>% 
+  group_by(sexuality) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+MH condition
+```{r}
+data %>% 
+  group_by(mhw_condition) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+Parents' education
+```{r}
+data %>% 
+  group_by(parents_edu) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+Public or private school
+```{r}
+data %>% 
+  group_by(public_private) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) 
+```
+
+
+Us or international
+```{r}
+data %>% 
+  group_by(us_international) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+
+Armed Forces
+```{r}
+data %>% 
+  group_by(armed_forces) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+
+Number of unique schools
+```{r}
+data %>%
+  select(university) %>%
+  unique() %>%
+  count()
+```
+
+
+
 Function to get the top N stress issues experience. 
 ```{r}
 top_n_stressors = function(data, n){
