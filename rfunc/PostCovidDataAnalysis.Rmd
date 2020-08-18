@@ -468,6 +468,64 @@ depression_analysis(data, "race")
 
 
 
+## Food and Housing Security
+```{r}
+food_housing_security_analysis = function(data, var){
+  grouped_housing = data %>%
+    group_by_(var, "housing_security_situation") %>%
+    summarise(n = n()) %>%
+    mutate(proportion = n/sum(n)) 
+  
+  
+  grouped_food = data %>%
+    group_by_(var, "food_security_situation") %>%
+    summarise(n = n()) %>%
+    mutate(proportion = n/sum(n)) 
+  
+  
+  
+  plot1 = ggplot(data = grouped_housing, aes_string(x = var, y = "proportion")) + 
+    geom_bar(aes(fill = str_wrap(housing_security_situation, 30)), position = "dodge", stat="identity") + 
+    theme(axis.text.x = element_text(angle = 45, hjust=1),  legend.text=element_text(size=9)) + 
+    labs(title = paste("Proportion of respondents of each ", var, " Housing Security Situation"), x = capitalize(var), y = "Proportion")+
+    scale_fill_discrete(name = "Housing Security")
+  
+  print(plot1)
+  
+  plot2 = ggplot(data = grouped_food, aes_string(x = var, y = "proportion")) + 
+    geom_bar(aes(fill = str_wrap(food_security_situation, 30)), position = "dodge", stat="identity") + 
+    theme(axis.text.x = element_text(angle = 45, hjust=1),  legend.text=element_text(size=9)) + 
+    labs(title = paste("Proportion of respondents of each ", var, " Food Security Situation"), x = capitalize(var), y = "Proportion")+
+    scale_fill_discrete(name = "Food Security")
+  
+  print(plot2)
+  
+  return(grouped_housing)
+
+}
+
+```
+
+
+```{r}
+food_housing_security_analysis(data, "race")
+```
+
+
+```{r}
+housing_food = data %>%
+  group_by(housing_security_situation, food_security_situation)%>%
+  summarise(n = n()) %>%
+  rename(housing = housing_security_situation, food = food_security_situation)
+
+print(housing_food)
+SankeyDiagram(housing_food[, c(-3)],
+              link.color = "Source", 
+              font.size = 8,
+              weights = housing_food$n) 
+```
+
+
 
 
 
