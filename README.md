@@ -49,3 +49,6 @@ Runs regression models on factors against a newly coded variable "new_belief" to
 Takes in processed data and summarizes screen results by race and gender, and by gender and sexual identity
 
 Returns a list with rows **rg** containing race and gender data; **rgf** race and gender with nas and 100% positive screens (used as a proxy for overly small race/gender groups) filtered out; **gs** with gender and sexuality; and **gsf** which is gs with nas and 100% positive screens filtered out.
+
+## Meditation_Analysis.R ##
+Runs demographic trends and ANOVA tests on comparing students who do and do not practice mindfulness techniques to see if their mental health levels are different
