@@ -1,0 +1,1413 @@
+---
+title: "Comparing Precovid and Y1.5 Data"
+date: "8/12/2020"
+output: html_document
+---
+
+```{r include=FALSE}
+#neccesary libraries 
+
+library(plyr)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+library(tidyverse)
+library(gridExtra)
+library(readxl)
+library(car)
+library(kimisc)
+library(checkmate)
+library(Hmisc)
+```
+
+### Goal
+Compare Y1.5 mhw screens (during Covid) vs Y1 screens (preCovid) for significant differences
+
+### Data
+152 students from 8 different colleges, Daytona, Prescott, Iowa, SDSU, SJSU, Cal Poly, Milwaukee, and Boulder, responded to the survey both before Covid and during Covid. Therefore, we are able to conduct 2-sample tests for equality of proportions, which is used to compare two proportions from two different groups to see if there is a significant difference between the proportion of students who had a positive screen from each group (precovid and during covid). It is important to note we need to use proportions since some students did not answer certain questions, and the sample size is different for each screen we look at. 
+
+We also looked at the demographics of the students and computed correlations between the demographics and the Y1.5 (during covid) screens to see if certain groups statistically significantly screened positive or negative. 
+
+```{r warning=FALSE, include=FALSE}
+#reading in the y1.5 data from each school
+
+Daytona <- read_excel("ERAU Daytona COVID-19 Collection Characterizing Engineering Student Me.xlsx")
+
+Prescott <- read_excel("ERAU Prescott COVID-19 Collection Characterizing Engineering Student M.xlsx")
+
+Iowa <- read_excel("Iowa State COVID 19 Collection Characterizing Engineering Student Ment.xlsx")
+
+SDSU <- read_excel("SDSU COVID-19 Collection Characterizing Engineering Student Mental Wel.xlsx")
+
+SJSU <- read_excel("SJSU COVID-19 Collection Characterizing Engineering Student Mental Wel.xlsx")
+
+CPSU <- read_excel("Cal Poly Characterizing Engineering Student Mental Wellness and Its Role i.xlsx")
+
+Milwaukee <- read_excel("UW Milwaukee COVID 19 Collection Characterizing Engineering Student Me (1).xlsx") 
+
+Boulder <- read_excel("CU Boulder COVID-19 Collection Characterizing Engineering Student Ment (1).xlsx")
+```
+
+```{r include=FALSE}
+#combine the y1.5 data sets from each school
+
+dataset <- rbind(Daytona, Prescott,Iowa,SDSU,SJSU,CPSU,Milwaukee,Boulder)
+```
+
+```{r include=FALSE}
+#take out those who declined to participate 
+
+data <- dataset[-c(91,101,159,179),]
+```
+
+```{r include=FALSE}
+#parse_funcs.r
+
+parse.var.yes_no <- data.frame(likert = c("Yes", "No"),
+                     value=c(1,0),stringsAsFactors=FALSE)
+
+parse.var.not_sev_mohalf_ned <- data.frame(likert = c("Not at all", "Several days",
+                                    "More than half the days",
+                                    "Nearly every day"),
+                                    value=c(0,0,1,1),stringsAsFactors=FALSE)
+
+parse.var.not_sev_mohalf <- data.frame(likert = c("Not at all", "Several Days",
+                                                      "More than half the days"),
+                                           value=c(0,0,1),stringsAsFactors=FALSE)
+
+parse.pcptsd <- function(data){
+    lmap <- parse.var.yes_no
+    
+    pcptsd_headers <- grep("pcptsd", names(data), value=TRUE)
+    
+    data <- parse.likert(data=data, header_names=pcptsd_headers, likert_map=lmap)
+    
+    return(data)
+}
+parse.phq.eating <- function(data){
+    lmap <- parse.var.yes_no
+    
+    eating_headers <- c(grep("phq_6", names(data),value=TRUE),grep("phq_7", names(data),value=TRUE),grep("phq_8", names(data),value=TRUE))
+    
+    data <- parse.likert(data=data, header_names=eating_headers, likert_map = lmap)
+    
+    return(data)
+}
+parse.phq.other_anx <- function(data){
+    lmap <- parse.var.not_sev_mohalf
+    
+    other_headers <- grep("phq_5", names(data),value=TRUE)
+    
+    data <- parse.likert(data=data, header_names = other_headers, likert_map = lmap)
+    
+    return(data)
+}
+parse.phq.panic <- function(data){
+    
+    yes_no <- parse.var.yes_no
+    panic_headers <- c(grep("phq_3", names(data),value=TRUE), grep("phq_4", names(data),value=TRUE))
+    
+    data <- parse.likert(data=data,header_names=panic_headers, likert_map=yes_no)
+    
+    return(data)
+}
+parse.phq.dep <- function(data){
+    atoh_score <- parse.var.not_sev_mohalf_ned
+    
+    i_score <- data.frame(likert = c("Not at all", "Several Days",
+                                        "More than half the days",
+                                        "Nearly every day"),
+                          value=c(0,1,1,1),stringsAsFactors=FALSE)
+
+    dep_headers <- grep("phq_2", names(data),value=TRUE)
+    
+    data <- parse.likert(data=data, header_names=dep_headers[1:8],
+                         likert_map=atoh_score)
+    data <- parse.likert(data=data, header_names=dep_headers[9],
+                         likert_map=i_score)
+    
+    return(data)
+}
+parse.kessler <- function(data){
+
+    kesscore <- data.frame(likert = c("All of the time","Most of the time","Some of the time","A little of the time","None of the time"), value=c(4,3,2,1,0),stringsAsFactors = FALSE)
+    #Grab the kessler 6 headings
+    kessler_headers <- kessnames <- grep("_", grep("kessler", names(data), value=TRUE), invert = TRUE, value = TRUE)
+
+    #Copy the relevant kesler rows for manipulation
+    #kesslerdata <- data[kessler_headers]
+
+    data <- parse.likert(data=data, header_names=kessler_headers,
+                         likert_map=kesscore)
+
+    return(data)
+}
+
+parse.likert <- function(data, header_names, likert_map){
+    likertdata <- data[header_names]
+    
+    data[header_names] <- likertdata %>%
+        pivot_longer(cols = header_names,names_to = "lscale",
+                     values_to="likert") %>%
+        left_join(likert_map, by = "likert") %>%
+        mutate(likert=value) %>%
+        select(-value) %>%
+        pivot_wider(names_from = "lscale", values_from="likert",
+                    values_fn = list(likert = list)) %>%
+        unnest(cols=header_names)
+    return(data)
+}
+```
+
+```{r include=FALSE}
+#Kessler Analysis
+
+analysis.kessler <- function(data){
+    data<-parse.kessler(data)
+    #add for major mental health
+    data <- mutate(data,
+                   kessler_major =
+                       ifelse((coalesce.na(kessler1,0)+coalesce.na(kessler2,0)+coalesce.na(kessler3,0)+coalesce.na(kessler4,0)+coalesce.na(kessler5,0)+
+                                coalesce.na(kessler6,0))>=13, 1,
+                               ifelse((coalesce.na(kessler1,4)+coalesce.na(kessler2,4)+coalesce.na(kessler3,4)+coalesce.na(kessler4,4)+coalesce.na(kessler5,4)+
+                                coalesce.na(kessler6,4)) < 13, 0, NA))
+                   )
+    data <- mutate(data,
+                   kessler_moderate =
+                     ifelse(kessler_major, 0, 
+                       ifelse((coalesce.na(kessler1,0)+coalesce.na(kessler2,0)+coalesce.na(kessler3,0)+coalesce.na(kessler4,0)+coalesce.na(kessler5,0)+
+                                coalesce.na(kessler6,0))>=5 & !coalesce.na(kessler_major, TRUE), 1 , ifelse((coalesce.na(kessler1,4)+coalesce.na(kessler2,4)+coalesce.na(kessler3,4)+coalesce.na(kessler4,4)+coalesce.na(kessler5,4)+
+                                coalesce.na(kessler6,4)) < 5, 0, NA)
+                              )
+                       )
+                   )
+    return(data)
+}
+
+data = analysis.kessler(data)
+```
+
+```{r include=FALSE}
+# phq analysis 
+
+analysis.phq.depr <- function(data){
+                                        #Grab phq_2a-2i
+    dep_headers <- grep("phq_2", names(data),value=TRUE)
+    #Parse the data to replace Likert style scores with 1s if they count and 0s
+    #if they don't
+    data <- parse.phq.dep(data)
+    data <- mutate(data,
+                      dep_major = ifelse(
+                      (rowSums(coalesce.na(data[dep_headers[-1:-2]],0))>=5) &
+                       (rowSums(coalesce.na(data[dep_headers[1:2]],0))>=1), 1,
+                      ifelse(rowSums(is.na(data[dep_headers[1:2]])) >= 1 & (rowSums(data[dep_headers[-1:-2]], na.rm = T) + rowSums(is.na(data[dep_headers[-1:-2]]))) >=5, NA, 0)
+                   ))
+                   #if_else(
+                    #   rowSums(is.na(data[dep_headers[-1:-2]]))>=2 |
+                     #      rowSums(is.na(data[dep_headers[1:2]]))==2, NA, 0))
+    data <- mutate(data,
+                      dep_other = ifelse(dep_major!=1, ifelse(
+                      (rowSums(coalesce.na(data[dep_headers[-1:-2]], 0))>=2) &
+                       (rowSums(coalesce.na(data[dep_headers[1:2]],0))>=1), 1 ,
+                       ifelse(rowSums(is.na(data[dep_headers[1:2]])) >= 1 & (rowSums(data[dep_headers[-1:-2]], na.rm = T) + rowSums(is.na(data[dep_headers[-1:-2]]))) >=2, NA, 0)), 0
+                   ))
+    
+    return(data)
+}
+analysis.phq.panic <- function(data){
+    data <- parse.phq.panic(data)
+    
+    panic3_headers <- grep("phq_3", names(data),value=TRUE)
+    panic4_headers <- grep("phq_4", names(data),value=TRUE)
+    data <- data %>% mutate(
+        panic = ifelse(rowSums(coalesce.na(data[panic3_headers],0))==4 & (rowSums(coalesce.na(data[panic4_headers],0))>=4), 1, 
+                       ifelse(rowSums(is.na(data[panic3_headers]))==0, 0, ifelse((rowSums(data[panic4_headers], na.rm = T) + rowSums(is.na(data[panic4_headers]))) >=4,NA, 0)))
+    )
+    
+    return(data)
+}
+analysis.phq.other <- function(data){
+    data <- parse.phq.other_anx(data)
+    other_headers <- grep("phq_5", names(data),value=TRUE)
+    data <- data %>% mutate(
+        other_anxiety = ifelse(data[other_headers[1]] & rowSums(data[other_headers[-1]], na.rm = T)>=3, 1, 
+                                ifelse(rowSums(is.na(data[other_headers[1]])) == 0, 0, ifelse((rowSums(data[other_headers], na.rm = T) + rowSums(is.na(data[other_headers]))), NA, 0)))
+    )
+    
+    return(data)
+}
+analysis.phq.eating <- function(data){
+    data <- parse.phq.eating(data)
+    eating6_headers <- grep("phq_6", names(data), value=TRUE)
+    
+    data <- data %>% mutate(
+        bulimia = if_else(phq_8 & (rowSums(data[eating6_headers], na.rm = T)==3),1,0)
+    )
+    
+    data <- data %>% mutate(
+        bin_eat = ifelse((is.na(phq_8)|phq_8==0)& (rowSums(data[eating6_headers], na.rm = T)==3),1,
+                          ifelse((is.na(phq_8)|phq_8==0)& (rowSums(data[eating6_headers], na.rm = T) + rowSums(is.na(data[eating6_headers][1:3]))) >= 3, NA, 0)
+    ))
+}
+
+data <- analysis.phq.depr(data)
+data <- analysis.phq.panic(data)
+data <- analysis.phq.other(data)
+data <- analysis.phq.eating(data)
+```
+
+```{r include=FALSE}
+#PCPTSD Analysis
+
+analysis.pcptsd <- function(data){
+    data <- parse.pcptsd(data)
+    ptsd_headers <- grep("pcptsd", names(data), value=TRUE)
+    print(head(data[grep("pcptsd", names(data), value=TRUE)]))
+    print(colnames(data))
+    data <- data %>% mutate(ptsd = ifelse(rowSums(data[ptsd_headers], na.rm = T)>=3,1,
+                                           ifelse(rowSums(data[ptsd_headers], na.rm = T) + rowSums(is.na(data[ptsd_headers])) >=3, NA, 0)))
+}
+
+data = analysis.pcptsd(data)
+
+mhw.results.summarize <- function(data){
+  race_gender <- with(data, aggregate(list(kessler_major=kessler_major, kessler_moderate=kessler_moderate, dep_major=dep_major, dep_other=dep_other, panic=panic, other_anxiety=other_anxiety,bulimia=bulimia,bin_eat=bin_eat,ptsd=ptsd),list(race=race, gender=gender), mean, na.rm=TRUE))
+  race_gender_filtered<-filter_all(.tbl=race_gender,.vars_predicate=all_vars(!is.nan(.) & .!=1))
+  #write.csv(x=cp_race_gender_filtered, file="~/mhw_analysis/calpoly_data/cp_race_gender.csv", row.names=FALSE)
+  gender_sex <- with(data, aggregate(list(kessler_major=kessler_major, kessler_moderate=kessler_moderate, dep_major=dep_major, dep_other=dep_other, panic=panic, other_anxiety=other_anxiety,bulimia=bulimia,bin_eat=bin_eat,ptsd=ptsd),list(gender=gender, sexuality=sexuality), mean, na.rm=TRUE))
+  gender_sex_filtered <- filter_all(.tbl=gender_sex,.vars_predicate=all_vars(!is.nan(.) & .!=1))
+  #write.csv(x=cp_gender_sex_filtered, file="~/mhw_analysis/calpoly_data/cp_gender_sex.csv", row.names=FALSE)
+  
+  return(list(rg=race_gender, rgf=race_gender_filtered, gs=gender_sex, gsf=gender_sex_filtered))
+}
+
+
+```
+
+```{r include=FALSE}
+#refine the y1.5 data 
+
+#data <- data %>%
+ # select(`Respondent ID`, major, belief_in_grad, college, kessler_major, kessler_moderate, dep_major, dep_other, panic, other_anxiety, bulimia, bin_eat, ptsd)
+```
+
+```{r include=FALSE}
+#read in the precovid data 
+
+precovid <- read_excel("precovid.xls")
+```
+
+```{r include=FALSE}
+#only use respondents shown in both the precovid and y1.5 data 
+
+precovid <- precovid %>%
+filter(uid %in% c("11347132420",
+"11347686789","11347571718","11392090397","11347312441","11347731596","11347129947","11347312098","11347142768","11347446287","11389519287","11347479209","11390329043","11391656092","11151592764","11144281287","11346780684","11147866030","11144311784","11336621732","11150066463","11154936258","11144357685","11142327584","11142321442","11142203900","11006064565","11142274793","11142224278","11142204398","11145131424","11005926956","11142334739","11005927827","11005938728","11142317048","11142229508","11145665427","11143045638","11142361586","11142400813","11154613621","11142513921","11142204793","11142549584","11143150591","11005948349","11142635873","11144849850","11142302163","11145850025","11006125266","11142235074","11389525562","11390097857","11342682467","11389435057","11342707442","11389770639","11342513496","11342611487","11342635460","11391437759","11342552029","11342734561","11342746268","11389813179","11342518123","11342533557","11374529094","11379877298","11373784945","11373955939","11374137315","11373822986","11374845245","11374077685","11380076885","11373866144","11373774516","11377581043","11373785482","11373787470","11374275782","11373775014","11374545317","11373993141","11373784019","11167062587","11167046638","11168883064","11167104519","11174258690","11169103504","11167246027","11169327838","11167348229","11167310693","11167868517","11167051190","11168024264","11167388137","11179455241","11167109542","11167651366","11167513285","11170988697","11167069375","11167058316","11167337872","11173437223","11167183612","11167174668","11167614081","11167328037","11167453881","11168048683","11169392240","11167050254","11167198900","11167053507","11168878892","11167267708","11184992602","11169083460","11167187858","11167782504","11167389779","11189351635","11167115248","11170269088","11167093764","11167771560","11167190267","11167425509","11167052944","11169048310","11329125016","11329172064","11329323249","11338498362","11329090090","11329245699","11331152623","11329441539","11352183835","11141710238","11010477608","11010446878","11010783285","11141588550","11389519585"))
+```
+
+```{r include=FALSE}
+#only use respondents shown in both the precovid and y1.5 data 
+
+data <- data %>%
+  filter(`Respondent ID` %in% c("11558200986","11556747583","11556136322","11554429093","11553973829","11553169854","11552880872","11552863024","11552829555","11552679460","11552455687","11552271808","11552261571","11552257124","11609881751","11602745854","11554273921","11554269180","11552920148","11552676211","11552408932","11552309463","11552304571","11623860980","11610879329","11610608032","11602946693","11602719010","11602417348","11602363671","11588116117","11556310802","11552206435","11552200959","11552169765","11551990366","11551975649","11551951190","11551946112","11551887078","11551883582","11551868822","11551865917","11551848815","11551810123","11551800943","11551765058","11551741186","11551711236","11551693258","11551615680","11551607468","11551597922","11557935873","11556593353","11556188511","11555255426","11554124184","11553302599","11553170206","11552512400","11552462985","11552374876","11552252733","11552238525","11552233241","11552232420","11552197933","11552191059","11552178728","11616938782","11610101381","11608743955","11607912124","11607017109","11602562506","11602244047","11592552426","11559155017","11554177882","11552734113","11552531058","11552415190","11552366756","11552347608","11552338930","11552300485","11552291412","11552273421","11608499239","11605988910","11605724602","11603876006","11603829640","11603287464","11603286578","11602582808","11602559251","11602516442","11602507568","11602498373","11602483490","11602455014","11602428599","11602426630","11602416120","11602415502","11602414403","11552478929","11548200352","11547820418","11546620885","11546467574","11546412255","11546340659","11546253129","11546162895","11545895376","11545737238","11544680563","11544660640","11544594246","11544561430","11544512560","11544510770","11544459425","11544321111","11544297619","11544249265","11544228709","11544176313","11544147648","11544142064","11544125870","11544121629","11544106677","11544091705","11544089959","11606184695","11604112921","11554304691","11552907968","11552731949","11552702726","11552522766","11552266019","11552242637","11602436769","11602423874","11549618751","11548726576","11548329853"))
+
+```
+
+### Major Psychological Distress
+***1 for a positive screen for major psychological distress from Kessler instrument***
+
+#### Y1.5 Data
+```{r echo=FALSE}
+#Kessler Major 
+
+#Proportion of positive and negative screen for y1.5 data 
+#Need to do proportions because since some respondents did not answer, the two data sets (y1.5 and precovid) have a different sample size 
+kessler_major_data <- data %>%
+  select(kessler_major)%>%
+  filter(kessler_major %in% c("1","0"))
+kessler_major_data %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(kessler_major == "1"),
+            `n Negative Screen` = sum(kessler_major == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+```
+
+#### Precovid Data
+```{r echo=FALSE}
+#Proportion of positive and negative screen for precovid data 
+kessler_major_precovid <- precovid %>%
+  select(kessler_major)%>%
+filter(kessler_major %in% c("1","0"))
+kessler_major_precovid %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(kessler_major == "1"),
+            `n Negative Screen` = sum(kessler_major == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+
+#2-Sample Test for Equality of Proportions
+#This test is used to compare two proportions from two different groups(precovid and Y1.5) to see if there is a significant difference between the proportion of students who had a positive screen from each group.
+prop.test(x=c(54,48), n=c(139,151), alternative = "two.sided", correct = FALSE)
+```
+
+During Covid has a higher proportion of students screening as positive for major psychological distress from Kessler instrument. With a high p-value of 0.21 the proportions are not statistically different.
+
+### Moderate Psychological Distress
+***1 for a positive screen for moderate psychological distress (must also screen negative for Kessler major)***
+
+#### Y1.5 Data
+```{r echo=FALSE}
+#Kessler Moderate 
+
+#Proportion of positive and negative screen for y1.5 data 
+#Need to do proportions because since some respondents did not answer, the two data sets (y1.5 and precovid) have a different sample size 
+kessler_moderate_data <- data %>%
+  select(kessler_moderate)%>%
+  filter(kessler_moderate %in% c("1","0"))
+kessler_moderate_data %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(kessler_moderate == "1"),
+            `n Negative Screen` = sum(kessler_moderate == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+
+```
+
+#### Precovid Data
+```{r echo=FALSE}
+#Proportion of positive and negative screen for precovid data 
+kessler_moderate_precovid <- precovid %>%
+  select(kessler_moderate)%>%
+filter(kessler_moderate %in% c("1","0"))
+kessler_moderate_precovid %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(kessler_moderate == "1"),
+            `n Negative Screen` = sum(kessler_moderate == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+
+## 2-Sample Test for Equality of Proportions
+#This test is used to compare two proportions from two different groups(precovid and Y1.5) to see if there is a significant difference between the proportion of students who had a positive screen from each group.
+prop.test(x=c(61,85), n=c(139,151), alternative = "two.sided", correct = FALSE)
+```
+
+Precovid has a higher proportion of students screening as positive for moderate psychological distress from Kessler instrument. With a small p-value of 0.03 the proportions are statistically different.
+
+### Depressive Disorder
+***1 for a positive screen for major depressive disorder***
+
+#### Y1.5 Data
+```{r echo=FALSE}
+#Dep Major 
+
+#Proportion of positive and negative screen for y1.5 data 
+#Need to do proportions because since some respondents did not answer, the two data sets (y1.5 and precovid) have a different sample size
+dep_major_data <- data %>%
+  select(dep_major)%>%
+  filter(dep_major %in% c("1","0"))
+dep_major_data %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(dep_major == "1"),
+            `n Negative Screen` = sum(dep_major == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+```
+
+#### Precovid Data
+```{r echo=FALSE}
+#Proportion of positive and negative screen for precovid data 
+dep_major_precovid <- precovid %>%
+  select(dep_major)%>%
+filter(dep_major %in% c("1","0"))
+dep_major_precovid %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(dep_major == "1"),
+            `n Negative Screen` = sum(dep_major == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+
+## 2-Sample Test for Equality of Proportions
+#This test is used to compare two proportions from two different groups(precovid and Y1.5) to see if there is a significant difference between the proportion of students who had a positive screen from each group.
+prop.test(x=c(20,10), n=c(137,128), alternative = "two.sided", correct = FALSE)
+```
+
+During Covid has a higher proportion of students screening as positive for depressive disorder. With a large p-value of 0.08 the proportions are not statistically different.
+
+### Other Depressive Disorder
+***1 for a positive screen for other depressive disorder (must also screen negative for dep_major)***
+
+#### Y1.5 Data
+```{r echo=FALSE}
+#Dep Other 
+
+#Proportion of positive and negative screen for y1.5 data 
+#Need to do proportions because since some respondents did not answer, the two data sets (y1.5 and precovid) have a different sample size
+dep_other_data <- data %>%
+  select(dep_other)%>%
+  filter(dep_other %in% c("1","0"))
+dep_other_data %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(dep_other == "1"),
+            `n Negative Screen` = sum(dep_other == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+```
+
+#### Precovid Data
+```{r echo=FALSE}
+#Proportion of positive and negative screen for precovid data 
+dep_other_precovid <- precovid %>%
+  select(dep_other)%>%
+filter(dep_other %in% c("1","0"))
+dep_other_precovid %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(dep_other == "1"),
+            `n Negative Screen` = sum(dep_other == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+
+## 2-Sample Test for Equality of Proportions
+#This test is used to compare two proportions from two different groups(precovid and Y1.5) to see if there is a significant difference between the proportion of students who had a positive screen from each group.
+prop.test(x=c(37,13), n=c(137,128), alternative = "two.sided", correct = FALSE)
+```
+
+During Covid has a higher proportion of students screening as positive for other depressive disorders. With a very small p-value of 0.00046 the proportions are statistically different.
+
+### Panic Disorder
+***1 for a positive screen for panic disorder***
+
+#### Y1.5 Data
+```{r echo=FALSE}
+#Panic 
+
+#Proportion of positive and negative screen for y1.5 data 
+#Need to do proportions because since some respondents did not answer, the two data sets (y1.5 and precovid) have a different sample size
+panic_data <- data %>%
+  select(panic)%>%
+  filter(panic %in% c("1","0"))
+panic_data %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(panic == "1"),
+            `n Negative Screen` = sum(panic == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+```
+
+#### Precovid Data
+```{r echo=FALSE}
+#Proportion of positive and negative screen for precovid data 
+panic_precovid <- precovid %>%
+  select(panic)%>%
+filter(panic %in% c("1","0"))
+panic_precovid %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(panic == "1"),
+            `n Negative Screen` = sum(panic == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+
+## 2-Sample Test for Equality of Proportions
+#This test is used to compare two proportions from two different groups(precovid and Y1.5) to see if there is a significant difference between the proportion of students who had a positive screen from each group.
+prop.test(x=c(14,19), n=c(126,141), alternative = "two.sided", correct = FALSE)
+```
+
+Precovid has a higher proportion of students screening as positive for panic disorder. With a large p-value of 0.58 the proportions are not statistically different.
+
+### Other Anxiety Disorder
+***1 for a positive screen for other anxiety disorder (respondent can screen positive for both panic and dep_other)***
+
+#### Y1.5 Data
+```{r echo=FALSE}
+#Other Anxiety 
+
+#Proportion of positive and negative screen for y1.5 data 
+#Need to do proportions because since some respondents did not answer, the two data sets (y1.5 and precovid) have a different sample size
+other_anxiety_data <- data %>%
+  select(other_anxiety)%>%
+  filter(other_anxiety %in% c("1","0"))
+other_anxiety_data %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(other_anxiety == "1"),
+            `n Negative Screen` = sum(other_anxiety == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+```
+
+#### Precovid Data
+```{r echo=FALSE}
+#Proportion of positive and negative screen for precovid data 
+other_anxiety_precovid <- precovid %>%
+  select(other_anxiety)%>%
+filter(other_anxiety %in% c("1","0"))
+other_anxiety_precovid %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(other_anxiety == "1"),
+            `n Negative Screen` = sum(other_anxiety == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+
+## 2-Sample Test for Equality of Proportions
+#This test is used to compare two proportions from two different groups(precovid and Y1.5) to see if there is a significant difference between the proportion of students who had a positive screen from each group.
+prop.test(x=c(35,28), n=c(137,148), alternative = "two.sided", correct = FALSE)
+```
+
+During Covid has a higher proportion of students screening as positive for other anxiety disorders. With a large p-value of 0.178 the proportions are not statistically different.
+
+### Bulimia
+***1 for a positive screen for bulimia***
+
+#### Y1.5 Data
+```{r echo=FALSE, warning=FALSE}
+#Bulimia 
+
+#Proportion of positive and negative screen for y1.5 data 
+#Need to do proportions because since some respondents did not answer, the two data sets (y1.5 and precovid) have a different sample size
+bulimia_data <- data %>%
+  select(bulimia)%>%
+  filter(bulimia %in% c("1","0"))
+bulimia_data %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(bulimia == "1"),
+            `n Negative Screen` = sum(bulimia == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+```
+
+#### Precovid Data
+```{r echo=FALSE, warning=FALSE}
+#Proportion of positive and negative screen for precovid data 
+bulimia_precovid <- precovid %>%
+  select(bulimia)%>%
+filter(bulimia %in% c("1","0"))
+bulimia_precovid %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(bulimia == "1"),
+            `n Negative Screen` = sum(bulimia == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+
+## 2-Sample Test for Equality of Proportions
+#This test is used to compare two proportions from two different groups(precovid and Y1.5) to see if there is a significant difference between the proportion of students who had a positive screen from each group.
+prop.test(x=c(8,1), n=c(151,146), alternative = "two.sided", correct = FALSE)
+```
+
+During Covid has a higher proportion of students screening as positive for Bulimia. With a small p-value of 0.02 the proportions are statistically different.
+
+### Binary Eating Disorder
+***1 for a positive screen for binary eating disorder (mutually exclusive with bulimia screen)***
+
+#### Y1.5 Data
+```{r echo=FALSE, warning=FALSE}
+#Bin Eat 
+
+#Proportion of positive and negative screen for y1.5 data 
+#Need to do proportions because since some respondents did not answer, the two data sets (y1.5 and precovid) have a different sample size
+bin_eat_data <- data %>%
+  select(bin_eat)%>%
+  filter(bin_eat %in% c("1","0"))
+bin_eat_data %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(bin_eat == "1"),
+            `n Negative Screen` = sum(bin_eat == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+```
+
+#### Precovid Data
+```{r echo=FALSE, warning=FALSE}
+#Proportion of positive and negative screen for precovid data 
+bin_eat_precovid <- precovid %>%
+  select(bin_eat)%>%
+filter(bin_eat %in% c("1","0"))
+bin_eat_precovid %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(bin_eat == "1"),
+            `n Negative Screen` = sum(bin_eat == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+
+## 2-Sample Test for Equality of Proportions
+#This test is used to compare two proportions from two different groups(precovid and Y1.5) to see if there is a significant difference between the proportion of students who had a positive screen from each group.
+prop.test(x=c(5,5), n=c(137,145), alternative = "two.sided", correct = FALSE)
+```
+
+During Covid has a slightly higher proportion of students screening as positive for binary eating disorder. With a large p-value of 0.93 the proportions are not statistically different.
+
+### PTSD
+***1 for a positive screen for PTSD on the pc-ptsd scale***
+
+#### Y1.5 Data
+```{r echo=FALSE}
+#PTSD 
+
+#Proportion of positive and negative screen for y1.5 data 
+#Need to do proportions because since some respondents did not answer, the two data sets (y1.5 and precovid) have a different sample size
+ptsd_data <- data %>%
+  select(ptsd)%>%
+  filter(ptsd %in% c("1","0"))
+ptsd_data %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(ptsd == "1"),
+            `n Negative Screen` = sum(ptsd == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+```
+
+#### Precovid Data
+```{r echo=FALSE}
+#Proportion of positive and negative screen for precovid data 
+ptsd_precovid <- precovid %>%
+  select(ptsd)%>%
+filter(ptsd %in% c("1","0"))
+ptsd_precovid %>% 
+  summarise(`Total n` = n(), 
+            `n Positive Screen` = sum(ptsd == "1"),
+            `n Negative Screen` = sum(ptsd == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+
+## 2-Sample Test for Equality of Proportions
+#This test is used to compare two proportions from two different groups(precovid and Y1.5) to see if there is a significant difference between the proportion of students who had a positive screen from each group.
+prop.test(x=c(37,25), n=c(135,145), alternative = "two.sided", correct = FALSE)
+```
+
+During Covid has a higher proportion of students screening as positive for PTSD. With a small p-value of 0.041 the proportions are statistically different.
+
+### Y1.5 Demographics
+
+#### Age
+```{r echo=FALSE}
+precovid %>% 
+  group_by(age) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+***Correlation between Age and Major Psychological Distress from Kessler Instrument***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between age and kessler major during covid
+precovid$age <- as.numeric(precovid$age)
+data$kessler_major <- as.numeric(data$kessler_major)
+cor.test(precovid$age, data$kessler_major)
+
+```
+
+***Correlation between Age and Moderate Psychological Distress***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between age and kessler moderate during covid 
+data$kessler_moderate <- as.numeric(data$kessler_moderate)
+cor.test(precovid$age, data$kessler_moderate)
+```
+
+***Correlation between Age and Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between age and depressive major during covid
+data$dep_major <- as.numeric(data$dep_major)
+cor.test(precovid$age, data$dep_major)
+```
+
+***Correlation between Age and Other Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between age and depressive other during covid 
+data$dep_other <- as.numeric(data$dep_other)
+cor.test(precovid$age, data$dep_other)
+```
+
+***Correlation between Age and Panic Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between age and panic disorder during covid 
+data$panic <- as.numeric(data$panic)
+cor.test(precovid$age, data$panic)
+```
+
+***Correlation between Age and Other Anxiety Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between age and other anxiety during covid 
+data$other_anxiety <- as.numeric(data$other_anxiety)
+cor.test(precovid$age, data$other_anxiety)
+```
+
+***Correlation between Age and Bulimia***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between age and bulimia during covid 
+data$bulimia <- as.numeric(data$bulimia)
+cor.test(precovid$age, data$bulimia)
+```
+
+***Correlation between Age and Binary Eating Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between age and binary eating disorder during covid 
+data$bin_eat <- as.numeric(data$bin_eat)
+cor.test(precovid$age, data$bin_eat)
+```
+
+***Correlation between Age and PTSD***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between age and ptsd during covid 
+data$ptsd <- as.numeric(data$ptsd)
+cor.test(precovid$age, data$ptsd)
+```
+
+#### Race
+```{r echo=FALSE}
+precovid %>% 
+  group_by(race) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+***Correlation between Race and Major Psychological Distress from Kessler Instrument***
+```{r echo=FALSE}
+race_rename <- precovid %>%
+  select(race)
+  
+  race_rename$race <- revalue(race_rename$race, c("White"= 1))
+  race_rename$race <- revalue(race_rename$race, c("Asian"= 2))
+  race_rename$race <- revalue(race_rename$race, c("Hispanic or Latino"= 3))
+  race_rename$race <- revalue(race_rename$race, c("Black or African American"= 4))
+  race_rename$race <- revalue(race_rename$race, c("Other (please specify)"= 5))
+  
+#is there a correlation between race and kessler major during covid
+race_rename$race <- as.numeric(race_rename$race)
+cor.test(race_rename$race, data$kessler_major)  
+```
+
+***Correlation between Race and Moderate Psychological Distress***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between race and kessler moderate during covid 
+cor.test(race_rename$race, data$kessler_moderate)
+```
+
+***Correlation between Race and Major Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between race and depressive major during covid
+cor.test(race_rename$race, data$dep_major)
+```
+
+***Correlation between Race and Other Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between race and depressive other during covid 
+cor.test(race_rename$race, data$dep_other)
+```
+
+***Correlation between Race and Panic Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between race and panic disorder during covid 
+cor.test(race_rename$race, data$panic)
+```
+
+***Correlation between Race and Other Anxiety Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between race and other anxiety during covid 
+cor.test(race_rename$race, data$other_anxiety)
+```
+
+***Correlation between Race and Bulimia***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between race and bulimia during covid 
+cor.test(race_rename$race, data$bulimia)
+```
+
+***Correlation between Race and Binary Eating Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between race and binary eating disorder during covid 
+cor.test(race_rename$race, data$bin_eat)
+```
+
+***Correlation between Race and PTSD***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between race and ptsd during covid 
+cor.test(race_rename$race, data$ptsd)
+```
+
+#### Gender
+```{r echo=FALSE}
+precovid %>% 
+  group_by(gender) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+***Correlation between Gender and Major Psychological Distress from Kessler Instrument***
+```{r echo=FALSE, warning=FALSE}
+gender_rename <- precovid %>%
+  select(gender)
+
+gender_rename$gender <- revalue(gender_rename$gender, c("Female"= 1))
+gender_rename$gender <- revalue(gender_rename$gender, c("Male"= 2))
+
+#is there a correlation between gender and kessler major during covid
+gender_rename$gender <- as.numeric(gender_rename$gender)
+cor.test(gender_rename$gender, data$kessler_major) 
+```
+
+***Correlation between Gender and Moderate Psychological Distress***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between gender and kessler moderate during covid 
+cor.test(gender_rename$gender, data$kessler_moderate)
+```
+
+***Correlation between Gender and Major Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between gender and depressive major during covid
+cor.test(gender_rename$gender, data$dep_major)
+```
+
+***Correlation between Gender and Other Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between gender and depressive other during covid 
+cor.test(gender_rename$gender, data$dep_other)
+```
+
+***Correlation between Gender and Panic Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between gender and panic disorder during covid 
+cor.test(gender_rename$gender, data$panic)
+```
+
+***Correlation between Gender and Other Anxiety Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between gender and other anxiety during covid 
+cor.test(gender_rename$gender, data$other_anxiety)
+```
+
+***Correlation between Gender and Bulimia***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between gender and bulimia during covid 
+cor.test(gender_rename$gender, data$bulimia)
+```
+
+***Correlation between Gender and Binary Eating Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between gender and binary eating disorder during covid 
+cor.test(gender_rename$gender, data$bin_eat)
+```
+
+***Correlation between Gender and PTSD***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between gender and ptsd during covid 
+cor.test(gender_rename$gender, data$ptsd)
+```
+
+#### Sexuality
+```{r echo=FALSE}
+precovid %>% 
+  group_by(sexuality) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+***Correlation between Sexuality and Major Psychological Distress from Kessler Instrument***
+```{r echo=FALSE, warning=FALSE}
+sex_rename <- precovid %>%
+  select(sexuality)
+
+sex_rename$sexuality <- revalue(sex_rename$sexuality, c("Heterosexual"= 1))
+sex_rename$sexuality <- revalue(sex_rename$sexuality, c("Bisexual"= 2))
+sex_rename$sexuality <- revalue(sex_rename$sexuality, c("Questioning or unsure"= 3))
+sex_rename$sexuality <- revalue(sex_rename$sexuality, c("Gay"= 4))
+sex_rename$sexuality <- revalue(sex_rename$sexuality, c("Lesbian"= 5))
+sex_rename$sexuality <- revalue(sex_rename$sexuality, c("Another sexual orientation, please specify"= 6))
+
+#is there a correlation between sexuality and kessler major during covid
+sex_rename$sexuality <- as.numeric(sex_rename$sexuality)
+cor.test(sex_rename$sexuality, data$kessler_major) 
+```
+
+***Correlation between Sexuality and Moderate Psychological Distress***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between sexuality and kessler moderate during covid 
+cor.test(sex_rename$sexuality, data$kessler_moderate)
+```
+
+***Correlation between Sexuality and Major Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between sexuality and depressive major during covid
+cor.test(sex_rename$sexuality, data$dep_major)
+```
+
+***Correlation between Sexuality and Other Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between sexuality and depressive other during covid 
+cor.test(sex_rename$sexuality, data$dep_other)
+```
+
+***Correlation between Sexuality and Panic Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between sexuality and panic disorder during covid 
+cor.test(sex_rename$sexuality, data$panic)
+```
+
+***Correlation between Sexuality and Other Anxiety Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between sexuality and other anxiety during covid 
+cor.test(sex_rename$sexuality, data$other_anxiety)
+```
+
+***Correlation between Sexuality and Bulimia***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between sexuality and bulimia during covid 
+cor.test(sex_rename$sexuality, data$bulimia)
+```
+
+***Correlation between Sexuality and Binary Eating Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between sexuality and binary eating disorder during covid 
+cor.test(sex_rename$sexuality, data$bin_eat)
+```
+
+***Correlation between Sexuality and PTSD***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between sexuality and ptsd during covid 
+cor.test(sex_rename$sexuality, data$ptsd)
+```
+
+#### MHW condition
+```{r echo=FALSE}
+precovid %>% 
+  group_by(mhw_condition) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+***Correlation between MHW Condition and Major Psychological Distress from Kessler Instrument***
+```{r echo=FALSE, warning=FALSE}
+mhw_rename <- precovid %>%
+  select(mhw_condition)
+
+mhw_rename$mhw_condition <- revalue(mhw_rename$mhw_condition, c("Yes"= 1))
+mhw_rename$mhw_condition <- revalue(mhw_rename$mhw_condition, c("No"= 2))
+
+#is there a correlation between MHW condition and kessler major during covid
+mhw_rename$mhw_condition <- as.numeric(mhw_rename$mhw_condition)
+cor.test(mhw_rename$mhw_condition, data$kessler_major) 
+```
+
+***Correlation between MHW Condition and Moderate Psychological Distress***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between MHW condition and kessler moderate during covid 
+cor.test(mhw_rename$mhw_condition, data$kessler_moderate)
+```
+
+***Correlation between MHW Condition and Major Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between MHW condition and depressive major during covid
+cor.test(mhw_rename$mhw_condition, data$dep_major)
+```
+
+***Correlation between MHW Condition and Other Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between MHW condition and depressive other during covid 
+cor.test(mhw_rename$mhw_condition, data$dep_other)
+```
+
+***Correlation between MHW Condition and Panic Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between MHW condition and panic disorder during covid 
+cor.test(mhw_rename$mhw_condition, data$panic)
+```
+
+***Correlation between MHW Condition and Other Anxiety Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between MHW condition and other anxiety during covid 
+cor.test(mhw_rename$mhw_condition, data$other_anxiety)
+```
+
+***Correlation between MHW Condition and Bulimia***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between MHW condition and bulimia during covid 
+cor.test(mhw_rename$mhw_condition, data$bulimia)
+```
+
+***Correlation between MHW Condition and Binary Eating Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between MHW condition and binary eating disorder during covid 
+cor.test(mhw_rename$mhw_condition, data$bin_eat)
+```
+
+***Correlation between MHW Condition and PTSD***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between MHW condition and ptsd during covid 
+cor.test(mhw_rename$mhw_condition, data$ptsd)
+```
+
+#### Parents' Education
+```{r echo=FALSE}
+precovid %>% 
+  group_by(parents_edu) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+***Correlation between Parents' Education and Major Psychological Distress from Kessler Instrument***
+```{r echo=FALSE, warning=FALSE}
+edu_rename <- precovid %>%
+  select(parents_edu)
+
+edu_rename$parents_edu <- revalue(edu_rename$parents_edu, c("Associate’s degree"= 1))
+edu_rename$parents_edu <- revalue(edu_rename$parents_edu, c("Bachelor’s degree"= 2))
+edu_rename$parents_edu <- revalue(edu_rename$parents_edu, c("Completed High School or Equivalent (Diploma or GED)"= 3))
+edu_rename$parents_edu <- revalue(edu_rename$parents_edu, c("Completed some college"= 4))
+edu_rename$parents_edu <- revalue(edu_rename$parents_edu, c("Completed some post-bachelor’s training (MS, PhD, Teaching Credential, etc.)"= 5))
+edu_rename$parents_edu <- revalue(edu_rename$parents_edu, c("Some formal schooling"= 6))
+
+#is there a correlation between Parents' Education and kessler major during covid
+edu_rename$parents_edu <- as.numeric(edu_rename$parents_edu)
+cor.test(edu_rename$parents_edu, data$kessler_major) 
+```
+
+***Correlation between Parents' Education and Moderate Psychological Distress***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between Parents' Education and kessler moderate during covid 
+cor.test(edu_rename$parents_edu, data$kessler_moderate)
+```
+
+***Correlation between Parents' Education and Major Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between Parents' Education and depressive major during covid
+cor.test(edu_rename$parents_edu, data$dep_major)
+```
+
+***Correlation between Parents' Education and Other Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between Parents' Education and depressive other during covid 
+cor.test(edu_rename$parents_edu, data$dep_other)
+```
+
+***Correlation between Parents' Education and Panic Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between Parents' Education and panic disorder during covid 
+cor.test(edu_rename$parents_edu, data$panic)
+```
+
+***Correlation between Parents' Education and Other Anxiety Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between Parents' Education and other anxiety during covid 
+cor.test(edu_rename$parents_edu, data$other_anxiety)
+```
+
+***Correlation between Parents' Education and Bulimia***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between Parents' Education and bulimia during covid 
+cor.test(edu_rename$parents_edu, data$bulimia)
+```
+
+***Correlation between Parents' Education and Binary Eating Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between Parents' Education and binary eating disorder during covid 
+cor.test(edu_rename$parents_edu, data$bin_eat)
+```
+
+***Correlation between Parents' Education and PTSD***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between Parents' Education and ptsd during covid 
+cor.test(edu_rename$parents_edu, data$ptsd)
+```
+
+#### Public or Private School
+```{r echo=FALSE}
+precovid %>% 
+  group_by(type) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) 
+```
+
+***Correlation between Public or Private School and Major Psychological Distress from Kessler Instrument***
+```{r echo=FALSE}
+school_rename <- precovid %>%
+  select(type)
+
+school_rename$type <- revalue(school_rename$type, c("public"= 1))
+school_rename$type <- revalue(school_rename$type, c("private"= 2))
+
+#is there a correlation between public or private school and kessler major during covid
+school_rename$type <- as.numeric(school_rename$type)
+cor.test(school_rename$type, data$kessler_major) 
+```
+
+***Correlation between Public or Private School and Moderate Psychological Distress***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between public or private school and kessler moderate during covid 
+cor.test(school_rename$type, data$kessler_moderate)
+```
+
+***Correlation between Public or Private School and Major Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between public or private school and depressive major during covid
+cor.test(school_rename$type, data$dep_major)
+```
+
+***Correlation between Public or Private School and Other Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between public or private school and depressive other during covid 
+cor.test(school_rename$type, data$dep_other)
+```
+
+***Correlation between Public or Private School and Panic Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between public or private school and panic disorder during covid 
+cor.test(school_rename$type, data$panic)
+```
+
+***Correlation between Public or Private School and Other Anxiety Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between public or private school and other anxiety during covid 
+cor.test(school_rename$type, data$other_anxiety)
+```
+
+***Correlation between Public or Private School and Bulimia***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between public or private school and bulimia during covid 
+cor.test(school_rename$type, data$bulimia)
+```
+
+***Correlation between Public or Private School and Binary Eating Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between public or private school and binary eating disorder during covid
+cor.test(school_rename$type, data$bin_eat)
+```
+
+***Correlation between Public or Private School and PTSD***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between public or private school and ptsd during covid 
+cor.test(school_rename$type, data$ptsd)
+```
+
+#### International or US
+```{r echo=FALSE}
+precovid %>% 
+  group_by(international) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+***Correlation between International or US and Major Psychological Distress from Kessler Instrument***
+```{r echo=FALSE, warning=FALSE}
+inter_rename <- precovid %>%
+  select(international)
+
+inter_rename$international <- revalue(inter_rename$international, c("Yes" = 1))
+inter_rename$international <- revalue(inter_rename$international, c("No" =2 ))
+
+#is there a correlation between international or us and kessler major during covid
+inter_rename$international <- as.numeric(inter_rename$international)
+cor.test(inter_rename$international, data$kessler_major)
+
+```
+
+***Correlation between International or US and Moderate Psychological Distress***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between international or us and kessler moderate during covid 
+cor.test(inter_rename$international, data$kessler_moderate)
+```
+
+***Correlation between International or US and Major Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between international or us and depressive major during covid
+cor.test(inter_rename$international, data$dep_major)
+```
+
+***Correlation between International or US and Other Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between international or us and depressive other during covid 
+cor.test(inter_rename$international, data$dep_other)
+```
+
+***Correlation between International or US and Panic Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between international or us and panic disorder during covid 
+cor.test(inter_rename$international, data$panic)
+```
+
+***Correlation between International or US and Other Anxiety Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between international or us and other anxiety during covid 
+cor.test(inter_rename$international, data$other_anxiety)
+```
+
+***Correlation between International or US and Bulimia***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between international or us and bulimia during covid 
+cor.test(inter_rename$international, data$bulimia)
+```
+
+***Correlation between International or US and Binary Eating Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between international or us and binary eating disorder during covid 
+cor.test(inter_rename$international, data$bin_eat)
+```
+
+***Correlation between International or US and PTSD***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between international or us and ptsd during covid 
+cor.test(inter_rename$international, data$ptsd)
+```
+
+#### Armed Forces
+```{r echo=FALSE}
+precovid %>% 
+  group_by(armed_forces) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+No one was a member of the armed forces so no need to do correlations. 
+
+#### College
+```{r echo=FALSE}
+precovid %>%
+  group_by(college) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+***Correlation between College and Major Psychological Distress from Kessler Instrument***
+```{r echo=FALSE}
+college_rename <- precovid %>%
+  select(college)
+
+college_rename$college <- revalue(college_rename$college, c("cpsu"= 1))
+college_rename$college <- revalue(college_rename$college, c("sjsu"= 2))
+college_rename$college <- revalue(college_rename$college, c("cub"= 3))
+college_rename$college <- revalue(college_rename$college, c("iowa"= 4))
+college_rename$college <- revalue(college_rename$college, c("uwm"= 5))
+college_rename$college <- revalue(college_rename$college, c("eraud"= 6))
+college_rename$college <- revalue(college_rename$college, c("eraup"= 7))
+college_rename$college <- revalue(college_rename$college, c("sdsu"= 8))
+
+#is there a correlation between college and kessler major during covid
+college_rename$college <- as.numeric(college_rename$college)
+cor.test(college_rename$college, data$kessler_major) 
+```
+
+***Correlation between College and Moderate Psychological Distress***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between college and kessler moderate during covid 
+cor.test(college_rename$college, data$kessler_moderate)
+```
+
+***Correlation between College and Major Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between college and depressive major during covid
+cor.test(college_rename$college, data$dep_major)
+```
+
+***Correlation between College and Other Depressive Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between college and depressive other during covid 
+cor.test(college_rename$college, data$dep_other)
+```
+
+***Correlation between College and Panic Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between college and panic disorder during covid 
+cor.test(college_rename$college, data$panic)
+```
+
+***Correlation between College and Other Anxiety Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between college and other anxiety during covid 
+cor.test(college_rename$college, data$other_anxiety)
+```
+
+***Correlation between College and Bulimia***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between college and bulimia during covid 
+cor.test(college_rename$college, data$bulimia)
+```
+
+***Correlation between College and Binary Eating Disorder***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between college and binary eating disorder during covid 
+cor.test(college_rename$college, data$bin_eat)
+```
+
+***Correlation between College and PTSD***
+```{r echo=FALSE, warning=FALSE}
+#is there a correlation between college and ptsd during covid 
+cor.test(college_rename$college, data$ptsd)
+```
+
+### Summary 
+
+The Pearson correlation measures the strength and direction of a linear relationship between two variables. A value closer to 0 suggests a weak relationship between the variables.
+
+Looking at the p-values, the correlations that are less than 0.05 are age and other depressive disorders, sexuality and major psychological distress from kessler instrument (kessler major), sexuality and major depressive disorder, international or US and panic disorder, and college and major psychological distress from kessler instrument (kessler major). This means all of their correlations are statistically significant and certain groups from these demographics do tend to screen a certain way to the corresponding disorder, even if the correlation is low. 
+
+***Correlation between Age and Other Depressive Disorder***
+
+The correlation is 0.18, which is a weak relationship between age and other depressive disorder but it is still statistically significant. The 95% confidence interval is (0.016,0.342).  
+
+***Correlation between Sexuality and Major Psychological Distress from Kessler Instrument***
+
+The correlation is 0.22, which is a weak relationship between sexuality and kessler major but it is still statistically significant. The 95% confidence interval is (0.051,0.37).
+
+***Correlation between Sexuality and Major Depressive Disorder***
+
+The correlation is 0.18, which is a weak relationship between sexuality and major depressive disorder but it is still statistically significant. The 95% confidence interval is (0.016,0.342).
+
+***Correlation between International or US Panic Disorder***
+
+The correlation is -0.22, which is a weak NEGATIVE relationship between international or US and panic disorder but it is still statistically significant. The 95% confidence interval is (-0.38,-0.044).
+
+***Correlation between College and Major Psychological Distress from Kessler Instrument***
+
+The correlation is 0.23, which is a weak relationship between college and kessler major but it is still statistically significant. The 95% confidence interval is (0.067,0.38).
+
+
+
+
+
+
+
+
+
+
+
