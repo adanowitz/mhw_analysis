@@ -17,6 +17,7 @@ library(ggplot2)
 library(Hmisc)
 library(zoo)
 library(stats)
+library(flipPlots)
 ```
 
 
@@ -513,6 +514,83 @@ food_housing_security_analysis(data, "race")
 
 
 ```{r}
+food_housing_security_analysis(data, "gender")
+```
+```{r}
+food_housing_security_analysis(data, "us_international")
+```
+
+
+
+```{r}
+tab_data = table(data$food_security_situation, data$gender)
+tab2_data = table(data$housing_security_situation, data$gender)
+print("Housing Security by Gender")
+chisq.test(tab_data)
+print("Food Security by Gender")
+chisq.test(tab2_data)
+
+```
+
+
+```{r}
+tab_data = table(data$food_security_situation, data$race)
+tab2_data = table(data$housing_security_situation, data$race)
+print("Housing Security by Race")
+chisq.test(tab_data)
+print("Food Security by Race")
+chisq.test(tab2_data)
+```
+
+```{r}
+tab_data = table(data$food_security_situation, data$parents_edu)
+tab2_data = table(data$housing_security_situation, data$parents_edu)
+print("Housing Security by Parents Edu")
+chisq.test(tab_data)
+print("Food Security by Parents Edu")
+chisq.test(tab2_data)
+```
+
+```{r}
+tab_data = table(data$food_security_situation, data$us_international)
+tab2_data = table(data$housing_security_situation, data$us_international)
+print("Housing Security by US_ international")
+chisq.test(tab_data)
+print("Food Security by US_internati
+      onal")
+chisq.test(tab2_data)
+```
+
+```{r}
+tab_data = table(data$food_security_situation, data$sexuality)
+tab2_data = table(data$housing_security_situation, data$sexuality)
+print("Housing Security by Sexuality")
+chisq.test(tab_data)
+print("Food Security by Sexuality")
+chisq.test(tab2_data)
+```
+
+```{r}
+tab_data = table(data$food_security_situation, data$mhw_condition)
+tab2_data = table(data$housing_security_situation, data$mhw_condition)
+print("Housing Security by MH Condition")
+chisq.test(tab_data)
+print("Food Security by MH Condition")
+chisq.test(tab2_data)
+```
+
+```{r}
+tab_data = table(data$food_security_situation, data$public_private)
+tab2_data = table(data$housing_security_situation, data$public_private)
+print("Housing Security by Public Private")
+chisq.test(tab_data)
+print("Food Security by Public Private")
+chisq.test(tab2_data)
+```
+
+
+```{r}
+
 housing_food = data %>%
   group_by(housing_security_situation, food_security_situation)%>%
   summarise(n = n()) %>%
@@ -521,7 +599,8 @@ housing_food = data %>%
 print(housing_food)
 SankeyDiagram(housing_food[, c(-3)],
               link.color = "Source", 
-              font.size = 8,
+              font.size = 7,
+              label.show.counts = TRUE,
               weights = housing_food$n) 
 ```
 
