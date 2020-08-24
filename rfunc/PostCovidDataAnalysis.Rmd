@@ -375,17 +375,6 @@ data %>%
 ```
 
 
-## Correlations between Covid Expereinces
-Correlation matrix of covid stress experiences.
-```{r}
-firstcol = which(colnames(data)=="death_spouse")
-lastcol = which(colnames(data)=="eating_change")
-covid_experiences = data[, c(firstcol:lastcol)] %>%
-  mutate_all(function(x) ifelse(x!=0, 1, 0))
-cor(covid_experiences)
-```
-
-
 
 ## Regressions Predicting Covid Experiences
 ```{r message=FALSE}
@@ -603,6 +592,135 @@ SankeyDiagram(housing_food[, c(-3)],
               label.show.counts = TRUE,
               weights = housing_food$n) 
 ```
+
+## Comorbidity
+### Covid Experiences 
+Correlation matrix of covid stress experiences.
+```{r}
+firstcol = which(colnames(data)=="death_spouse")
+lastcol = which(colnames(data)=="eating_change")
+covid_experiences = data[, c(firstcol:lastcol)] %>%
+  mutate_all(function(x) ifelse(x!=0, 1, 0))
+cor(covid_experiences)
+```
+
+
+This function takes a vector of covid stress experiences as strings, and will output a bar graph for respondents who experienced all things in the input list, what proportion experienced each other stress experience. Your qualifying experiences could be singluar or a vector. 
+```{r}
+comorbid_covid_exp_with= function(var){
+  experienced = count(covid_experiences %>%
+  filter(., rowSums(.[var])==length(var)))$n
+  
+  var_data = covid_experiences %>%
+  filter(., rowSums(.[var])==length(var)) %>%
+  select(-var) %>%
+  gather(key = "diagnosis", value = "value") %>%
+  group_by(diagnosis) %>%
+  summarise(proportion = sum(value, na.rm = TRUE)/count(covid_experiences %>%
+  filter(rowSums(.[var]) == length(var)))$n)
+  
+  plot = ggplot(var_data, aes(x = reorder(diagnosis,-proportion), y = proportion)) + 
+    geom_bar(stat="identity") + 
+    labs(title = paste("Proportion of Respondents Who Experienced Each Situation Who Also Experienced '", var, "'"), x = "Stress Experience") +
+    theme(axis.text.x = element_text(angle = 45, hjust=1)) 
+  
+  print(plot)
+  return(paste(experienced, " respondents experienced ", paste0(var, collapse = ", ")))
+}
+```
+
+```{r}
+comorbid_covid_exp_with(c("eating_change", "take_loan", "social_change"))
+```
+
+```{r}
+comorbid_covid_exp_with("social_change")
+```
+
+
+```{r}
+comorbid_covid_exp_with("death_family")
+```
+
+
+
+
+
+
+
+
+
+
+### MH Diagnoses
+
+We'll make 2 tables to try to group the conditions with multiple and exclusive categories. 
+Table 1:
+```{r}
+firstcol = which(colnames(data)=="kessler_major")
+lastcol = which(colnames(data)=="ptsd")
+mhdiagnoses = data[, c(firstcol:lastcol)]
+mhdiagnoses = mhdiagnoses[complete.cases(mhdiagnoses), ]
+cor(mhdiagnoses)
+```
+
+Table 2: 
+```{r}
+firstcol = which(colnames(data)=="kessler_major")
+lastcol = which(colnames(data)=="ptsd")
+mhdiagnoses_all = data[, c(firstcol:lastcol)] %>%
+  mutate(dep_any = ifelse(dep_major ==1 |dep_other ==1, 1, 0)) %>%
+  mutate(anx_any = ifelse(other_anxiety ==1 |panic ==1, 1, 0)) %>%
+  mutate(kessler_any = ifelse(kessler_major ==1 |kessler_moderate ==1, 1, 0)) %>%
+  select(-c("dep_major", "dep_other", "other_anxiety", "panic", "kessler_major", "kessler_moderate"))
+mhdiagnoses =mhdiagnoses_all[complete.cases(mhdiagnoses_all), ]
+cor(mhdiagnoses)
+```
+
+```{r}
+comorbid_diagnosis_with= function(var){
+  var_data = mhdiagnoses_all %>%
+  filter(.[var] == 1) %>%
+  select(-var) %>%
+  gather(key = "diagnosis", value = "value") %>%
+  group_by(diagnosis) %>%
+  summarise(proportion = sum(value, na.rm = TRUE)/count(mhdiagnoses_all %>%
+  filter(.[var] == 1))$n)
+  
+  ggplot(var_data, aes(x = diagnosis, y = proportion)) + 
+    geom_bar(stat="identity") + 
+    labs(title = paste("Proportion of Respondents With Different MH Diagnoses Who had '", var, "'"))
+}
+
+```
+
+
+```{r}
+comorbid_diagnosis_with("dep_any")
+```
+
+```{r}
+comorbid_diagnosis_with("bin_eat")
+```
+
+
+```{r}
+comorbid_diagnosis_with("anx_any")
+```
+
+```{r}
+comorbid_diagnosis_with("bulimia")
+```
+
+```{r}
+comorbid_diagnosis_with("ptsd")
+```
+
+```{r}
+comorbid_diagnosis_with("kessler_any")
+```
+
+
+
 
 
 
