@@ -18,6 +18,8 @@ library(Hmisc)
 library(zoo)
 library(stats)
 library(flipPlots)
+library(tidyverse)
+library(tidytext)
 ```
 
 
@@ -388,7 +390,7 @@ model_data = test_data %>%
 
 varnames = names(model_data)[6:30]
 fit = lapply(varnames, 
-    FUN=function(x) glm(formula(paste(x, "~age + race + sexuality + mhw_condition")), family=binomial(link='logit'), data=model_data))
+    FUN=function(x) glm(formula(paste(x, "~age + race + gender + sexuality + mhw_condition")), family=binomial(link='logit'), data=model_data))
 names(fit) <- varnames
 
 
@@ -447,8 +449,6 @@ depression_analysis = function(data, var){
   return(grouped)
 
 }
-
-
 ```
 
 ```{r}
@@ -593,6 +593,36 @@ SankeyDiagram(housing_food[, c(-3)],
               weights = housing_food$n) 
 ```
 
+
+## Access Quesitons
+```{r}
+access_to_instruction_analysis = function(data, var){
+  grouped_access_to_materials = data %>%
+    group_by_(var, "access_to_instruction_course_materials_situation") %>%
+    summarise(n = n()) %>%
+    mutate(proportion = n/sum(n)) 
+  
+  
+  
+  plot1 = ggplot(data = grouped_access_to_materials, aes_string(x = var, y = "proportion")) + 
+    geom_bar(aes(fill = str_wrap(access_to_instruction_course_materials_situation, 30)), position = "dodge", stat="identity") + 
+    labs(title = paste("Proportion of respondents of each ", var, " \nAccess to Instruction Course Materials Situation"), x = capitalize(var), y = "Proportion")+
+    scale_fill_discrete(name = "Access to Instruction") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),  legend.text=element_text(size=9)) 
+  
+  print(plot1)
+  
+  return(grouped_access_to_materials)
+
+}
+```
+
+```{r}
+access_to_instruction_analysis(data, "race")
+```
+
+
+
 ## Comorbidity
 ### Covid Experiences 
 Correlation matrix of covid stress experiences.
@@ -621,8 +651,8 @@ comorbid_covid_exp_with= function(var){
   
   plot = ggplot(var_data, aes(x = reorder(diagnosis,-proportion), y = proportion)) + 
     geom_bar(stat="identity") + 
-    labs(title = paste("Proportion of Respondents Who Experienced Each Situation Who Also Experienced '", var, "'"), x = "Stress Experience") +
-    theme(axis.text.x = element_text(angle = 45, hjust=1)) 
+    labs(title = paste("Proportion of Respondents Who Experienced Each Situation \nWho Also Experienced '", var, "'"), x = "Stress Experience") +
+    theme(axis.text.x = element_text(angle = 45, hjust=1), plot.title = element_text(size=12, hjust = 0.5))
   
   print(plot)
   return(paste(experienced, " respondents experienced ", paste0(var, collapse = ", ")))
@@ -686,7 +716,7 @@ comorbid_diagnosis_with= function(var){
   summarise(proportion = sum(value, na.rm = TRUE)/count(mhdiagnoses_all %>%
   filter(.[var] == 1))$n)
   
-  ggplot(var_data, aes(x = diagnosis, y = proportion)) + 
+  ggplot(var_data, aes(x = reorder(diagnosis, -proportion), y = proportion)) + 
     geom_bar(stat="identity") + 
     labs(title = paste("Proportion of Respondents With Different MH Diagnoses Who had '", var, "'"))
 }
@@ -718,6 +748,110 @@ comorbid_diagnosis_with("ptsd")
 ```{r}
 comorbid_diagnosis_with("kessler_any")
 ```
+
+
+
+
+## Predicting MH Screenings Using the COVID New Stress
+Looking at predicting the MH Screenings using the COVID "new_stress" variable. 
+
+
+```{r message=FALSE}
+data = data %>%
+  mutate(dep_any = ifelse(dep_major ==1 |dep_other ==1, 1, 0)) %>%
+  mutate(anx_any = ifelse(other_anxiety ==1 |panic ==1, 1, 0)) %>%
+  mutate(kessler_any = ifelse(kessler_major ==1 |kessler_moderate ==1, 1, 0))
+
+
+diagnoses_names = names(data[, c("kessler_major", "kessler_moderate", "dep_major", "dep_other", "panic", "other_anxiety", "bulimia", "bin_eat", "ptsd", "dep_any", "anx_any", "kessler_any")])
+model_data = data %>%
+  select(age, gender, race, sexuality, mhw_condition, c("kessler_major":"kessler_any")) %>%
+  mutate_each(function(x) ifelse(x!=0, 1, 0), c("kessler_major", "kessler_moderate", "dep_major","dep_other", "panic", "other_anxiety", "bulimia", "bin_eat", "ptsd", "dep_any", "anx_any", "kessler_any")) 
+
+
+
+fit = lapply(diagnoses_names, 
+    FUN=function(x) glm(formula(paste(x, "~age + race + sexuality + mhw_condition + new_stress")), family=binomial(link='logit'), data=model_data))
+names(fit) <- diagnoses_names
+
+
+predictor_names = names(which(summary(fit$kessler_major)$coeff[-1,4] >0))
+print(predictor_names)
+
+group_sig_dif = data.frame(predictor = predictor_names, 
+                           Stat_More_Likely = rep("", length(predictor_names)),
+                           Stat_Less_Likely = rep("", length(predictor_names)), 
+                           stringsAsFactors = F)
+
+
+for (m in fit){
+  print(paste("Response of below model is experiencing", names(m$model)[1]))
+  test_sum = summary(m)
+  print(test_sum)
+
+  more_likely = names(which(test_sum$coeff[-1,4] < 0.05 & test_sum$coeff[-1,1] > 0))
+  less_likely = names(which(test_sum$coeff[-1,4] < 0.05 & test_sum$coeff[-1,1] < 0))
+  for (v in more_likely){
+    group_sig_dif$Stat_More_Likely[group_sig_dif$predictor == v] = paste(group_sig_dif$Stat_More_Likely[group_sig_dif$predictor == v],",", names(m$model)[1])
+  }
+  
+  for (v in less_likely){
+    group_sig_dif$Stat_Less_Likely[group_sig_dif$predictor == v] = paste(group_sig_dif$Stat_Less_Likely[group_sig_dif$predictor == v],",", names(m$model)[1])
+  }
+  
+}
+group_sig_dif$Stat_More_Likely =gsub("^.{0,2}", "", group_sig_dif$Stat_More_Likely)
+group_sig_dif$Stat_Less_Likely =gsub("^.{0,2}", "", group_sig_dif$Stat_Less_Likely)
+group_sig_dif
+```
+
+It seems that an increase in new_stress is associated with greater likelihood of screening positive for each of the mental health diagnoses. 
+
+
+## Free Response Analysis
+We can analyze here at a basic level what respondents are talking about in their text responses. 
+```{r}
+removeSpecialChars =function(text){
+  return (gsub("[^a-zA-Z0-9 ]", " ", text))
+}
+
+
+getWordCounts = function(question) {
+  question = as.character(question)
+  tidy = tibble(question) %>%
+    mutate(responseNum = row_number()) %>%
+    unnest_tokens(word, question) %>%
+    anti_join(stop_words) %>%
+    filter(complete.cases(.)) %>%
+    count(word, sort = TRUE)
+    
+  return(tidy)
+}
+
+```
+
+
+```{r}
+getWordCounts(data$cope_strategies_free_response)
+```
+
+```{r}
+getWordCounts(data$university_mental_health_not_supportive_in_pandemic)
+```
+
+```{r}
+getWordCounts(data$wish_university_did_in_pandemic_mental_health)
+```
+
+```{r}
+getWordCounts(data$wish_university_resources_provided_pandemic_mental_health)
+```
+
+
+
+
+
+
 
 
 
