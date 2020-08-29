@@ -1,0 +1,63 @@
+---
+title: "PreVsPostCovidAnalysis"
+author: "Daniel DeFoe"
+date: "8/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+```
+
+
+```{r}
+post_df = read.csv("postCovidDataWScreenings.csv") %>%
+  mutate(pre_post_covid = "post") %>%
+  select(c("gender", "race", "sexuality", "armed_forces", "parents_edu", "kessler_major", "kessler_moderate", "dep_major", "dep_other", "panic", "other_anxiety", "bulimia", "bin_eat", "ptsd", "pre_post_covid"))
+
+pre_df = read.csv("survey_data_filtered_and_aggregated.csv")%>%
+  mutate(pre_post_covid = "pre")%>%
+  select(c("gender", "race", "sexuality", "armed_forces", "parents_edu", "kessler_major", "kessler_moderate", "dep_major", "dep_other", "panic", "other_anxiety", "bulimia", "bin_eat", "ptsd", "pre_post_covid"))
+```
+
+
+
+```{r}
+both_data = rbind(post_df, pre_df) %>%
+  mutate(dep_any = ifelse(dep_major ==1 |dep_other ==1, 1, 0))
+```
+## T-tests 
+```{r}
+t.test(dep_major ~ pre_post_covid, data = both_data)
+t.test(dep_any ~ pre_post_covid, data = both_data)
+t.test(panic ~ pre_post_covid, data = both_data)
+t.test(bulimia ~ pre_post_covid, data = both_data)
+t.test(bin_eat ~ pre_post_covid, data = both_data)
+t.test(ptsd ~ pre_post_covid, data = both_data)
+```
+
+
+
+```{r}
+pre_count = nrow(pre_df)
+post_count = nrow(post_df)
+both_data2 = both_data %>% 
+  select(c(kessler_major, kessler_moderate, dep_major, kessler_moderate, dep_major, dep_other, panic, other_anxiety, bulimia, bin_eat, ptsd, pre_post_covid)) %>%
+  group_by(pre_post_covid) %>%
+  summarise_all(list(sum),  na.rm=TRUE) %>% 
+  gather(key = "diagnosis", "Proportion", 2:10) %>%
+  mutate(Proportion = ifelse(pre_post_covid == "pre", Proportion/pre_count, Proportion/post_count))
+both_data2
+both_data2$pre_post_covid = relevel(as.factor(both_data2$pre_post_covid), "pre")
+ggplot(data = both_data2, aes(x= diagnosis, y = Proportion)) +
+  geom_bar(aes(fill = pre_post_covid), position = "dodge", stat="identity") + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+  labs(title = "Proportion of MH Diagnoses Before and After COVID", x = "Diagnoses", fill= "Pre/Post Covid") 
+  
+```
+
