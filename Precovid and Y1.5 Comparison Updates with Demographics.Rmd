@@ -314,6 +314,48 @@ data <- data %>%
 
 ```
 
+### Major and Moderate Psychological Distress
+***Combination of Kessler Major and Moderate***
+
+#### Y1.5 Data 
+```{r echo=FALSE}  
+#Kessler major and moderate 
+#combine kessler major and moderate. Proportion of positive and negative screen for y1.5 data
+kkmm <- data %>%
+  select(kessler_major, kessler_moderate) %>%
+filter(kessler_major %in% c("1","0") & kessler_moderate %in% c("1","0"))
+kkmm %>%
+  summarise(`Total n` = 278, 
+            `n Positive Screen` = sum(kessler_major == "1") + sum(kessler_moderate == "1"),
+            `n Negative Screen` = sum(kessler_major == "0") + sum(kessler_moderate == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+```
+
+#### Precovid Data
+```{r echo=FALSE}
+#combine kessler major and moderate. Proportion of positive and negative screen for precovid data 
+kkmm2 <- precovid %>%
+  select(kessler_major, kessler_moderate) %>%
+filter(kessler_major %in% c("1","0") & kessler_moderate %in% c("1","0"))
+kkmm2 %>%
+  summarise(`Total n` = 302, 
+            `n Positive Screen` = sum(kessler_major == "1") + sum(kessler_moderate == "1"),
+            `n Negative Screen` = sum(kessler_major == "0") + sum(kessler_moderate == "0"),
+            `Proportion Positive Screen` = round(`n Positive Screen` / `Total n`, 3),
+            `Proportion Negative Screen` = round(`n Negative Screen` / `Total n`, 3)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("bordered"))
+
+#2-Sample Test for Equality of Proportions
+#This test is used to compare two proportions from two different groups(precovid and Y1.5) to see if there is a significant difference between the proportion of students who had a positive screen from each group.
+prop.test(x=c(115,133), n=c(278,302), alternative = "two.sided", correct = FALSE)
+```
+
+Precovid has a higher proportion of students screening as positive for the combination of major and moderate psychological distress from Kessler instrument (precovid: 44%, during covid: 41%). With a high p-value of 0.52 the proportions are not statistically different.
+
 ### Major Psychological Distress
 ***1 for a positive screen for major psychological distress from Kessler instrument***
 
