@@ -9,13 +9,44 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r, include=FALSE}
+```{r include=FALSE}
+library(MASS)
+```
+
+```{r include=FALSE}
 library(tidyverse)
+library(dplyr)
 library(kimisc)
 library(checkmate)
 library(ggplot2)
 library(Hmisc)
 library(zoo)
+library(stats)
+library(flipPlots)
+library(tidyverse)
+library(tidytext)
+library(kableExtra)
+library(formattable)
+library(htmltools)
+library(webshot)
+
+
+```
+
+A function for later saving tables as images. 
+
+```{r, include=FALSE}
+export_formattable <- function(f, file, width = "100%", height = NULL, 
+                               background = "white", delay = 0.2)
+    {
+      w <- as.htmlwidget(f, width = width, height = height)
+      path <- html_print(w, background = background, viewer = NULL)
+      url <- paste0("file:///", gsub("\\\\", "/", normalizePath(path)))
+      webshot(url,
+              file = file,
+              selector = ".formattable_widget",
+              delay = delay)
+    }
 ```
 
 
@@ -23,12 +54,13 @@ library(zoo)
 data = read.csv("postCovidDataWScreenings.csv")
 ```
 
+Setting the baseline levels of factors.
+
 ```{r}
 data$gender = relevel(data$gender, "Male")
 data$race= relevel(data$race, "White")
 data$public_private = relevel(data$public_private, "public")
 data$sexuality = relevel(data$sexuality, "Heterosexual")
-data$gender = relevel(data$gender, "Male")
 data$us_international = relevel(data$us_international, "us")
 data$armed_forces = relevel(data$armed_forces, "No")
 data$parents_edu = relevel(data$parents_edu, "Bachelor’s degree")
@@ -36,12 +68,96 @@ data$parents_edu = relevel(data$parents_edu, "Bachelor’s degree")
 
 
 
+
 ## Initial Data Summaries
+Demographic breakdown is as follows. 
+Race
+```{r}
+data %>% 
+  group_by(race) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+Gender
+```{r}
+data %>% 
+  group_by(gender) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+Sexuality
+```{r}
+data %>% 
+  group_by(sexuality) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+MH condition
+```{r}
+data %>% 
+  group_by(mhw_condition) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+Parents' education
+```{r}
+data %>% 
+  group_by(parents_edu) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+Public or private school
+```{r}
+data %>% 
+  group_by(public_private) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) 
+```
+
+
+Us or international
+```{r}
+data %>% 
+  group_by(us_international) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+
+Armed Forces
+```{r}
+data %>% 
+  group_by(armed_forces) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  drop_na()
+```
+
+
+Number of unique schools
+```{r}
+data %>%
+  dplyr::select(university) %>%
+  unique() %>%
+  count()
+```
+
+
+
 Function to get the top N stress issues experience. 
 ```{r}
 top_n_stressors = function(data, n){
   data_sub = data %>%
-    select(c("death_spouse":"eating_change")) #Grabs only the changing stress experiences columns
+    dplyr::select(c("death_spouse":"eating_change")) #Grabs only the changing stress experiences columns
   data_sub = data.frame(data_sub)
   data_sub = plyr::ldply(data.frame(data_sub), function(x) sum(x != 0)) %>% 
     rename(experience=.id, freq = V1) %>%
@@ -63,12 +179,12 @@ experience_freq = top_n_stressors(data, 50) %>%
 experience_freq$experience = factor(experience_freq$experience, levels = experience_freq$experience)
 
 ggplot(experience_freq, aes(x = experience, y = freq)) + 
-  theme(axis.text.x = element_text(angle = 45, hjust=1)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1, size = 11)) + 
   geom_bar(stat="identity") + 
-  labs(title = "Frequency of Different Experiences Students have had Post-Covid")
+  labs(title = "Frequency of Different Experiences Students Have Had Post-Covid", x = "Experience", y = "Freq")
 ```
 
-
+Social change was the most commonly reported experience, and forclosure was the most least reported experience.
 
 Here is the number of screenings we got for each mh condition. 
 
@@ -82,49 +198,67 @@ colSums(!is.na(data[,c("kessler_major", "kessler_moderate", "dep_major","dep_oth
 
 
 ## Stress Score by Demographic Analysis
+
+This will be the dataset that we do statistical tests on unless grouping by us_international,  profit_nonprofit or twoYear_fourYear.
+
 ```{r}
-#This will be the dataset that we do statistical tests on unless grouping by us_international,  profit_nonprofit or twoYear_fourYear
 test_data = data%>%
   filter(us_international == "us" & profit_nonprofit == "nonprofit" & twoYear_fourYear == 4 & eng_undergrad == "Yes")
 
 ```
 
-Distribution of all new stress scores. 
+
+This is a different version of the dataset which is based on respondents from 2 year schools.
+
+```{r}
+twoYear_test_data = data%>%
+  filter(us_international == "us" & profit_nonprofit == "nonprofit" & twoYear_fourYear == 2 & eng_undergrad == "Yes")
+```
+
+Distribution of all new stress scores, most common scores are around 75-100. 
 ```{r}
 ggplot(test_data, aes(x=new_stress)) +
   geom_histogram() + 
-  labs(title = "Distribution of New Stress Scores")
+  labs(title = "Distribution of New Stress Scores", x = "New Stress Score", y = "Freq")
 ```
 
 
-Distribution of new stress scores by gender. 
+Distribution of new stress scores by gender. The distributions are similar, but males seem to experience slightly greater stress.
 ```{r}
-ggplot(test_data, aes(x=new_stress)) +
+test_data_gender = test_data %>%
+  filter(gender == "Male" | gender == "Female")
+ggplot(test_data_gender, aes(x=new_stress)) +
   geom_histogram() + 
-  labs(title = "Distribution of New Stress Scores By Gender") +
+  labs(title = "Distribution of New Stress Scores By Gender", x = "New Stress Score", y = "Freq") +
   facet_grid(gender ~ .) +
   theme(strip.text.y = element_text(size=6, angle=0))
 ```
 
-Distribution of all new stress scores by race. 
+Distribution of all new stress scores by race. Some African American respondents have experienced extremely high amounts of stress, and for the number of observations of Hispanic respondents there are a high proportion of respondents in this group with higher than average stress scores.
 ```{r}
 ggplot(test_data, aes(x=new_stress)) +
   geom_histogram() + 
-  labs(title = "Distribution of New Stress Scores By Race") +
+  labs(title = "Distribution of New Stress Scores By Race", x = "New Stress Score", y = "Freq") +
   facet_grid(race ~ .)+
   theme(strip.text.y = element_text(size=6, angle=0))
 ```
 
-A linear regression model predicting new stress with some demographic variables. (using only 4 year, us, nonprofits)
+A linear regression model predicting new stress with some demographic variables. (using only 4 year, us, nonprofits) The best model was fit using a mixed stepwise method, and it had an adjusted R-squared of 0.1879. 
+The significant variables were the intercept, a respondent's race being "raceHispanic or Latino" or "raceOther (please specify)", mental health in treatment being "mhw_in_treatmentPrefer not to respond" or "mhw_in_treatmentYes", being an international student, being in the armed forces, having a learning disability, or having a physical disibility. This model closed form equation resulted as $new\_stress = 149.7710 + 31.1507(raceHispanic Or Latino) + 115.7923(raceOther) + 83.6628(mhw\_in\_treatmentPrefer Not To Respond) + 98.1052(mhw\_in\_treatmentYes) + 39.5013(internationalYes) - 52.6571(armed\_forcesYes) -51.2357(learning_disYes) +47.9151(physical_disYes)$
 ```{r}
-model = lm(new_stress ~ gender + age + race + mhw_condition + mhw_in_treatment ,data =test_data)
-summary(model)
+data_sub= test_data %>% 
+  dplyr::select(c("gender", "age", "race", "mhw_condition", "mhw_in_treatment", "sexuality", "international", "parents_edu", "public_private", "armed_forces", "learning_dis", "physical_dis", "year_in_program", "new_stress")) %>%
+  na.omit()
+
+model = lm(new_stress ~ gender + age + race + mhw_condition + mhw_in_treatment + sexuality + international + parents_edu + public_private + armed_forces + learning_dis + physical_dis + year_in_program,data =data_sub)
+step_model = stepAIC(model, direction = "both", trace = FALSE)
+summary(step_model)
 ```
 
 
 
 
-The following function will let us see the distribution of the numeric "new_stress" score by a grouping variable of our choice.
+The following function will let us see the distribution of the numeric "new_stress" score by a grouping variable of our choice, in a different way, using boxplots. Then there will also be t-tests or anovas testing if there are significant differences in new_stress between the groups. 
 ```{r}
 visualize_new_stress_dist = function(data, groups){
   ggplot(data = data, aes_string(x = groups, y = "new_stress", fill = groups)) + 
@@ -149,7 +283,7 @@ The p-value suggests that there is not evidence of a significant difference in n
 
 
 ```{r}
-t.test(new_stress ~ public_private,data = data)
+t.test(new_stress ~ public_private,data = test_data)
 visualize_new_stress_dist(data, "public_private")
 ```
 
@@ -157,8 +291,10 @@ The p-value suggests that there is strong evidence of a significant difference i
 
 
 ```{r}
-t.test(new_stress ~ us_international,data = data)
-visualize_new_stress_dist(data, "us_international")
+internatonal_data = test_data %>%
+  filter(international == "Yes" | international=="No")
+t.test(new_stress ~ international,data = internatonal_data)
+visualize_new_stress_dist(internatonal_data , "international")
 ```
 
 The p-value suggests that there is strong evidence of a significant difference in new stress between students at in the US and international students.
@@ -217,7 +353,7 @@ visualize_new_stress_dist(test_data, "year_in_program")
 Very little evidence of any significant differences here. 
 
 
-## General Analysis of Diagnoses by Demographic
+## General Analysis of Diagnoses + New Stress by Demographic
 
 This gives an output analyzing the different screenings by a chosen demographic. 
 ```{r}
@@ -253,73 +389,140 @@ process_grouped = function(data, var){
 ```
 
 ```{r message=FALSE}
-process_grouped(data, "race")
+process_grouped(test_data, "race")
 ```
+
+The greatest average new_stress race group is Other, but this may be because of the low number of respondents in this category. Hispanic/Latino and Native Hawaiian/Pacific Islanders each have an average new_stress of just under 200. 
+
+```{r}
+process_grouped(test_data, "gender")
+```
+
+It seems that males and females have about the same average new_stress score. 
 
 
 ```{r}
-process_grouped(data, "gender")
+process_grouped(test_data, "sexuality")
 ```
+
+It seems that respondents who identify as bisexual seemed to have a much higher average new_stress at around 250. 
 
 ```{r}
-process_grouped(data, "sexuality")
+process_grouped(test_data, "public_private")
 ```
+
+Public school students seem to have a slightly higher average new_stress score than private school students. 
 
 ```{r}
-process_grouped(data, "public_private")
+process_grouped(test_data, "mhw_condition")
 ```
+
+
+Respondents with a mental health condition seem to have a greater average new_stress score than those without. 
 
 ```{r}
-process_grouped(data, "us_international")
+process_grouped(test_data, "mhw_in_treatment")
 ```
 
-```{r}
-process_grouped(data, "mhw_condition")
-```
-
-```{r}
-process_grouped(data, "mhw_in_treatment")
-```
-
-
-
-```{r}
-data %>%
-  group_by(mhw_condition, mhw_in_treatment) %>%
-  select(c("kessler_major", "kessler_moderate", "dep_major", "dep_other", "panic", "other_anxiety", "bulimia", "bin_eat", "ptsd", "new_stress")) %>%
-  summarise_all(mean, na.rm=TRUE)
-```
-
-
-## Correlations between Covid Expereinces
-Correlation matrix of covid stress experiences.
-```{r}
-firstcol = which(colnames(data)=="death_spouse")
-lastcol = which(colnames(data)=="eating_change")
-covid_experiences = data[, c(firstcol:lastcol)] %>%
-  mutate_all(function(x) ifelse(x!=0, 1, 0))
-cor(covid_experiences)
-```
+Respondents in treatment for mental health conditions seem to have a greater average new_stress score than those who are not.
 
 
 
 ## Regressions Predicting Covid Experiences
+This script iterates through the different covid stress experiences and fits a model using the demographic variables as predictors. It outputs a table with the expereinces that each predictor variable class is statistically more or less likely to experience. 
 ```{r message=FALSE}
-firstcol = which(colnames(data)=="death_spouse")
-lastcol = which(colnames(data)=="eating_change")
-covid_experiences = names(data[, c(firstcol:lastcol)])
+firstcol = which(colnames(test_data)=="death_spouse")
+lastcol = which(colnames(test_data)=="eating_change")
+covid_experiences = names(test_data[, c(firstcol:lastcol)])
 model_data = test_data %>%
-  select(age, gender, race, sexuality, mhw_condition, c("death_spouse":"eating_change")) %>%
+  select(age, gender, race, sexuality, mhw_condition, mhw_in_treatment, international, parents_edu, public_private, armed_forces, learning_dis,  physical_dis, year_in_program, c("death_spouse":"eating_change")) %>%
   mutate_each(function(x) ifelse(x!=0, 1, 0), c("death_spouse":"eating_change")) 
 
 
 varnames = names(model_data)[6:30]
 fit = lapply(varnames, 
-    FUN=function(x) glm(formula(paste(x, "~age + race + sexuality + mhw_condition")), family=binomial(link='logit'), data=model_data))
+    FUN=function(x) glm(formula(paste(x, "~gender + age + race + mhw_condition + mhw_in_treatment + sexuality + international + parents_edu + public_private + armed_forces + learning_dis + physical_dis + year_in_program")), family=binomial(link='logit'), data=model_data))
 names(fit) <- varnames
 
 
 predictor_names = names(which(summary(fit$death_spouse)$coeff[-1,4] >0))
+group_sig_dif = data.frame(predictor_of_experience = predictor_names, 
+                           Stat_More_Likely = rep("", length(predictor_names)),
+                           Stat_Less_Likely = rep("", length(predictor_names)), 
+                           stringsAsFactors = F)
+
+
+for (m in fit){
+  print(paste("Response of below model is experiencing", names(m$model)[1]))
+  test_sum = summary(m)
+  print(test_sum)
+
+  more_likely = names(which(test_sum$coeff[-1,4] < 0.05 & test_sum$coeff[-1,1] > 0))
+  less_likely = names(which(test_sum$coeff[-1,4] < 0.05 & test_sum$coeff[-1,1] < 0))
+  for (v in more_likely){
+    group_sig_dif$Stat_More_Likely[group_sig_dif$predictor == v] = paste(group_sig_dif$Stat_More_Likely[group_sig_dif$predictor == v],",\n", names(m$model)[1])
+  }
+  
+  for (v in less_likely){
+    group_sig_dif$Stat_Less_Likely[group_sig_dif$predictor == v] = paste(group_sig_dif$Stat_Less_Likely[group_sig_dif$predictor == v],",\n", names(m$model)[1])
+  }
+  
+}
+
+
+#group_sig_dif$Stat_More_Likely = substring(group_sig_dif$Stat_More_Likely, first = 4)
+#group_sig_dif$Stat_Less_Likely =substring(group_sig_dif$Stat_Less_Likely, first = 4)
+group_sig_dif$Stat_More_Likely =gsub("^.{0,4}", "", group_sig_dif$Stat_More_Likely)
+group_sig_dif$Stat_Less_Likely =gsub("^.{0,4}", "", group_sig_dif$Stat_Less_Likely)
+group_sig_dif
+
+```
+
+
+```{r}
+to_black = formatter("span", style ="color:black;white-space: pre-line")
+group_sig_dif$predictor_of_experience = to_black(group_sig_dif$predictor_of_experience)
+group_sig_dif$Stat_More_Likely = to_black(group_sig_dif$Stat_More_Likely)
+group_sig_dif$Stat_Less_Likely = to_black(group_sig_dif$Stat_Less_Likely)
+
+line_split = function(x){renderFormattable(x)}
+
+names(group_sig_dif)= to_black(names(group_sig_dif))
+
+obj =formattable(group_sig_dif, align = c("l","c", "c"))
+export_formattable(obj, "regs_predicting_covid_exp.png")
+```
+
+
+
+
+
+## Regressions Predicting MH Screenings
+Looking at predicting the MH Screenings using the COVID "new_stress" variable. 
+
+
+```{r message=FALSE}
+test_data = test_data %>%
+  mutate(dep_any = ifelse(dep_major ==1 |dep_other ==1, 1, 0)) %>%
+  mutate(anx_any = ifelse(other_anxiety ==1 |panic ==1, 1, 0)) %>%
+  mutate(kessler_any = ifelse(kessler_major ==1 |kessler_moderate ==1, 1, 0))
+
+
+diagnoses_names = names(test_data[, c("kessler_major", "kessler_moderate", "dep_major", "dep_other", "panic", "other_anxiety", "bulimia", "bin_eat", "ptsd", "dep_any", "anx_any", "kessler_any")])
+model_data = test_data %>%
+  select(age, gender, race, sexuality, mhw_condition, mhw_in_treatment, international, parents_edu, public_private, armed_forces, learning_dis,  physical_dis, year_in_program,c("kessler_major":"kessler_any")) %>%
+  mutate_each(function(x) ifelse(x!=0, 1, 0), c("kessler_major", "kessler_moderate", "dep_major","dep_other", "panic", "other_anxiety", "bulimia", "bin_eat", "ptsd", "dep_any", "anx_any", "kessler_any")) 
+
+
+
+fit = lapply(diagnoses_names, 
+    FUN=function(x) glm(formula(paste(x, "~gender + age + race + mhw_condition + mhw_in_treatment + sexuality + international + parents_edu + public_private + armed_forces + learning_dis + physical_dis + year_in_program")), family=binomial(link='logit'), data=model_data))
+names(fit) <- diagnoses_names
+
+
+predictor_names = names(which(summary(fit$kessler_major)$coeff[-1,4] >0))
+print(predictor_names)
+
 group_sig_dif = data.frame(predictor = predictor_names, 
                            Stat_More_Likely = rep("", length(predictor_names)),
                            Stat_Less_Likely = rep("", length(predictor_names)), 
@@ -350,9 +553,25 @@ group_sig_dif
 
 
 
+```{r}
+to_black = formatter("span", style ="color:black;white-space: pre-line")
+group_sig_dif$predictor_of_experience = to_black(group_sig_dif$predictor_of_experience)
+group_sig_dif$Stat_More_Likely = to_black(group_sig_dif$Stat_More_Likely)
+group_sig_dif$Stat_Less_Likely = to_black(group_sig_dif$Stat_Less_Likely)
+
+line_split = function(x){renderFormattable(x)}
+
+names(group_sig_dif)= to_black(names(group_sig_dif))
+
+obj =formattable(group_sig_dif, align = c("l","c", "c"))
+export_formattable(obj, "regs_predicting_mh_screens.png")
+```
+
+
 
 
 ## Analysis of Depression Major or Other
+The following will analyze the various types of depression in different demographic groups. 
 ```{r}
 depression_analysis = function(data, var){
   grouped = data %>%
@@ -374,13 +593,405 @@ depression_analysis = function(data, var){
   return(grouped)
 
 }
+```
 
 
+Native Hawaiian or Other Pacific Islander respondents are the group with the highest proportion responding that they have depression (of each type)
+
+```{r}
+depression_analysis(test_data, "race")
+```
+
+
+
+
+## Food and Housing Security
+The following will analyze the food and housing security in different demographic groups. 
+```{r}
+food_housing_security_analysis = function(data, var){
+  grouped_housing = data %>%
+    group_by_(var, "housing_security_situation") %>%
+    summarise(n = n()) %>%
+    mutate(proportion = n/sum(n)) 
+  
+  
+  grouped_food = data %>%
+    group_by_(var, "food_security_situation") %>%
+    summarise(n = n()) %>%
+    mutate(proportion = n/sum(n)) 
+  
+  
+  
+  plot1 = ggplot(data = grouped_housing, aes_string(x = var, y = "proportion")) + 
+    geom_bar(aes(fill = str_wrap(housing_security_situation, 30)), position = "dodge", stat="identity") + 
+    theme(axis.text.x = element_text(angle = 45, hjust=1),  legend.text=element_text(size=9)) + 
+    labs(title = paste("Proportion of respondents of each ", var, " Housing Security Situation"), x = capitalize(var), y = "Proportion")+
+    scale_fill_discrete(name = "Housing Security")
+  
+  print(plot1)
+  
+  plot2 = ggplot(data = grouped_food, aes_string(x = var, y = "proportion")) + 
+    geom_bar(aes(fill = str_wrap(food_security_situation, 30)), position = "dodge", stat="identity") + 
+    theme(axis.text.x = element_text(angle = 45, hjust=1),  legend.text=element_text(size=9)) + 
+    labs(title = paste("Proportion of respondents of each ", var, " Food Security Situation"), x = capitalize(var), y = "Proportion")+
+    scale_fill_discrete(name = "Food Security")
+  
+  print(plot2)
+  
+  return(grouped_housing)
+
+}
+
+```
+
+American Indian or Native Americans have the greatest proportion of respondents who were already experiencing housing insecurity made worse by COVID, and they are the group with the greatest proportion of respondents newly experiencing food insecurity.  
+
+```{r}
+food_housing_security_analysis(test_data, "race")
+```
+
+Males and Females had similar experiences around food and housing security. 
+
+```{r}
+food_housing_security_analysis(test_data, "gender")
+```
+
+Next chi-squared tests for independence will be done to see if there are significantly different answers to these questions by demographic group. 
+
+```{r}
+tab_data = table(test_data$food_security_situation, test_data$gender)
+tab2_data = table(test_data$housing_security_situation, test_data$gender)
+print("Housing Security by Gender")
+chisq.test(tab_data)
+print("Food Security by Gender")
+chisq.test(tab2_data)
+
+```
+
+The p-values suggest that there is not evidence of a significant difference in food security situation or housing security situation between respondents of different genders.
+
+
+
+```{r}
+tab_data = table(test_data$food_security_situation, test_data$race)
+tab2_data = table(test_data$housing_security_situation, test_data$race)
+print("Housing Security by Race")
+chisq.test(tab_data)
+print("Food Security by Race")
+chisq.test(tab2_data)
+```
+
+The p-values suggest that there is strong evidence of significant differences in food security situation and housing security situation between respondents of different races.
+
+
+```{r}
+tab_data = table(test_data$food_security_situation, test_data$parents_edu)
+tab2_data = table(test_data$housing_security_situation, test_data$parents_edu)
+print("Housing Security by Parents Edu")
+chisq.test(tab_data)
+print("Food Security by Parents Edu")
+chisq.test(tab2_data)
+```
+
+The p-values suggest that there is strong evidence of significant differences in food security situation and housing security situation between respondents of with different parent educations.
+
+```{r}
+tab_data = table(test_data$food_security_situation, test_data$international)
+tab2_data = table(test_data$housing_security_situation, test_data$international)
+print("Housing Security by International Student")
+chisq.test(tab_data)
+print("Food Security by International Student")
+chisq.test(tab2_data)
+```
+
+The p-values suggest that there is strong evidence of significant differences in food security situation and housing security situation between international students and non-international students.
+
+
+```{r}
+tab_data = table(test_data$food_security_situation, test_data$sexuality)
+tab2_data = table(test_data$housing_security_situation, test_data$sexuality)
+print("Housing Security by Sexuality")
+chisq.test(tab_data)
+print("Food Security by Sexuality")
+chisq.test(tab2_data)
+```
+
+The p-values suggest that there is not evidence of significant differences in food security situation and housing security situation between respondents of different sexualities.
+
+
+```{r}
+tab_data = table(test_data$food_security_situation, test_data$mhw_condition)
+tab2_data = table(test_data$housing_security_situation, test_data$mhw_condition)
+print("Housing Security by MH Condition")
+chisq.test(tab_data)
+print("Food Security by MH Condition")
+chisq.test(tab2_data)
+```
+
+The p-values suggest that there is not evidence of significant differences in food security situation and housing security situation between respondents of different mental health consitions.
+
+
+```{r}
+tab_data = table(test_data$food_security_situation, test_data$public_private)
+tab2_data = table(test_data$housing_security_situation, test_data$public_private)
+print("Housing Security by Public Private")
+chisq.test(tab_data)
+print("Food Security by Public Private")
+chisq.test(tab2_data)
+```
+
+The p-values suggest that there is strong evidence of significant differences in food security situation and housing security situation between respondents in public school versus those in private schools.
+
+
+
+
+The following river plot shows the density of respondents who had each combination of housing security and food security situations. 
+```{r}
+
+housing_food = test_data %>%
+  group_by(housing_security_situation, food_security_situation)%>%
+  summarise(n = n()) %>%
+  rename(housing = housing_security_situation, food = food_security_situation)
+
+print(housing_food)
+SankeyDiagram(housing_food[, c(-3)],
+              link.color = "Source", 
+              font.size = 7,
+              label.show.counts = TRUE,
+              weights = housing_food$n) 
+```
+
+
+## Access Quesitons
+```{r}
+access_to_instruction_analysis = function(data, var){
+  grouped_access_to_materials = data %>%
+    group_by_(var, "access_to_instruction_course_materials_situation") %>%
+    summarise(n = n()) %>%
+    mutate(proportion = n/sum(n)) 
+  
+  
+  
+  plot1 = ggplot(data = grouped_access_to_materials, aes_string(x = var, y = "proportion")) + 
+    geom_bar(aes(fill = str_wrap(access_to_instruction_course_materials_situation, 30)), position = "dodge", stat="identity") + 
+    labs(title = paste("Proportion of respondents of each ", var, " \nAccess to Instruction Course Materials Situation"), x = capitalize(var), y = "Proportion")+
+    scale_fill_discrete(name = "Access to Instruction") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),  legend.text=element_text(size=9)) 
+  
+  print(plot1)
+  
+  return(grouped_access_to_materials)
+
+}
+```
+
+Most Native Hawaiians and Pacific Islanders and American Indians or Alaska Natives are reporting have issues accessing course instruction, materials, and supplies as a result of COVID. 
+
+```{r}
+access_to_instruction_analysis(test_data, "race")
+```
+
+
+
+## Comorbidity
+### Covid Experiences 
+Correlation matrix of covid stress experiences.
+```{r}
+firstcol = which(colnames(test_data)=="death_spouse")
+lastcol = which(colnames(test_data)=="eating_change")
+covid_experiences = test_data[, c(firstcol:lastcol)] %>%
+  mutate_all(function(x) ifelse(x!=0, 1, 0))
+cor(covid_experiences)
+```
+
+
+This function takes a vector of covid stress experiences as strings, and will output a bar graph for respondents who experienced all things in the input list, what proportion experienced each other stress experience. Your qualifying experiences could be singluar or a vector. 
+```{r}
+comorbid_covid_exp_with= function(var){
+  experienced = count(covid_experiences %>%
+  filter(., rowSums(.[var])==length(var)))$n
+  
+  var_data = covid_experiences %>%
+  filter(., rowSums(.[var])==length(var)) %>%
+  select(-var) %>%
+  gather(key = "diagnosis", value = "value") %>%
+  group_by(diagnosis) %>%
+  summarise(proportion = sum(value, na.rm = TRUE)/count(covid_experiences %>%
+  filter(rowSums(.[var]) == length(var)))$n)
+  
+  plot = ggplot(var_data, aes(x = reorder(diagnosis,-proportion), y = proportion)) + 
+    geom_bar(stat="identity") + 
+    labs(title = paste("Proportion of Respondents Who Experienced Each Situation \nWho Also Experienced '", var, "'"), x = "Stress Experience") +
+    theme(axis.text.x = element_text(angle = 45, hjust=1), plot.title = element_text(size=12, hjust = 0.5))
+  
+  print(plot)
+  return(paste(experienced, " respondents experienced ", paste0(var, collapse = ", ")))
+}
+```
+
+
+Most respondents who experienced "eating_change", "take_loan", "social_change" are also experiencing "family_gather_change", "sleeping_change", etc.
+
+```{r}
+comorbid_covid_exp_with(c("eating_change", "take_loan", "social_change"))
+```
+
+70% of respondents who experienced "social_change" are also experiencing changes in "hours_conditions". 
+
+```{r}
+comorbid_covid_exp_with("social_change")
+```
+
+
+40% of respondents who experienced "death_family" also experienced "eating_change".
+
+```{r}
+comorbid_covid_exp_with("death_family")
+```
+
+
+
+
+
+
+
+
+
+
+### MH Diagnoses
+
+We'll make 2 tables to try to group the conditions with multiple and exclusive categories. 
+Table 1:
+```{r}
+firstcol = which(colnames(data)=="kessler_major")
+lastcol = which(colnames(data)=="ptsd")
+mhdiagnoses = data[, c(firstcol:lastcol)]
+mhdiagnoses = mhdiagnoses[complete.cases(mhdiagnoses), ]
+cor(mhdiagnoses)
+formattable(as.data.frame(cor(mhdiagnoses)), list(formatter("span"),
+  `metric` = formatter("span", style = ~ style(color = "grey",font.weight = "bold","border-radius" = "0px")), 
+                     area(col = -1) ~ function(x) percent(x / 100, digits = 0),
+                     area(col = -1) ~ function(x)ifelse(x<=0, color_tile("red", "transparent")(x*c(x<=0)), 
+                                    color_tile("transparent", "forest green")(x*c(x>=0)))))
+```
+
+Table 2: 
+```{r}
+firstcol = which(colnames(test_data)=="kessler_major")
+lastcol = which(colnames(test_data)=="ptsd")
+mhdiagnoses_all = test_data[, c(firstcol:lastcol)] %>%
+  mutate(dep_any = ifelse(dep_major ==1 |dep_other ==1, 1, 0)) %>%
+  mutate(anx_any = ifelse(other_anxiety ==1 |panic ==1, 1, 0)) %>%
+  mutate(kessler_any = ifelse(kessler_major ==1 |kessler_moderate ==1, 1, 0)) %>%
+  select(-c("dep_major", "dep_other", "other_anxiety", "panic", "kessler_major", "kessler_moderate"))
+mhdiagnoses =mhdiagnoses_all[complete.cases(mhdiagnoses_all), ]
+cor(mhdiagnoses)
+```
+
+This function would show visualizations of the proportion of respondents with a given mh experiencing other mh experiences. 
+```{r}
+comorbid_diagnosis_with= function(var){
+  var_data = mhdiagnoses_all %>%
+  filter(.[var] == 1) %>%
+  select(-var) %>%
+  gather(key = "diagnosis", value = "value") %>%
+  group_by(diagnosis) %>%
+  summarise(proportion = sum(value, na.rm = TRUE)/count(mhdiagnoses_all %>%
+  filter(.[var] == 1))$n)
+  
+  ggplot(var_data, aes(x = reorder(diagnosis, -proportion), y = proportion)) + 
+    geom_bar(stat="identity") + 
+    labs(title = paste("Proportion of Respondents With Different MH Diagnoses Who had '", var, "'"))
+}
+
+```
+
+More than a quarter of respondents with dep_any also screened positive for ptsd. 
+
+```{r}
+comorbid_diagnosis_with("dep_any")
+```
+
+More than half of respondents with bin_eat also screened positive for dep_any. 
+
+```{r}
+comorbid_diagnosis_with("bin_eat")
+```
+
+More than half of respondents with anx_any also screened positive for dep_any. 
+
+```{r}
+comorbid_diagnosis_with("anx_any")
+```
+
+More than half of respondents with bulimia also screened positive for dep_any. 
+
+```{r}
+comorbid_diagnosis_with("bulimia")
+```
+
+
+More than half of respondents with ptsd also screened positive for dep_any. 
+
+```{r}
+comorbid_diagnosis_with("ptsd")
+```
+
+About a quarter of respondents with kessler_any also screened positive for ptsd. 
+
+```{r}
+comorbid_diagnosis_with("kessler_any")
+```
+
+
+
+## Free Response Analysis
+We can analyze here at a basic level what respondents are talking about in their text responses. 
+```{r}
+removeSpecialChars =function(text){
+  return (gsub("[^a-zA-Z0-9 ]", " ", text))
+}
+
+
+getWordCounts = function(question) {
+  question = as.character(question)
+  tidy = tibble(question) %>%
+    mutate(responseNum = row_number()) %>%
+    unnest_tokens(word, question) %>%
+    anti_join(stop_words) %>%
+    filter(complete.cases(.)) %>%
+    count(word, sort = TRUE)
+    
+  return(tidy)
+}
+
+```
+
+
+Spending time with friends and family seems to be a frequent response with how people cope with covid. 
+```{r}
+getWordCounts(test_data$cope_strategies_free_response)
+```
+
+
+```{r}
+getWordCounts(test_data$university_mental_health_not_supportive_in_pandemic)
 ```
 
 ```{r}
-depression_analysis(data, "race")
+getWordCounts(test_data$wish_university_did_in_pandemic_mental_health)
 ```
+
+```{r}
+getWordCounts(test_data$wish_university_resources_provided_pandemic_mental_health)
+```
+
+
+
+
+
+
+
 
 
 

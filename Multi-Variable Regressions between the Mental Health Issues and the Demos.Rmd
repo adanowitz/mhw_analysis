@@ -1,0 +1,872 @@
+---
+title: "Multi-Variable Regressions and T-Tests between the Mental Health Issues and the Demographics for the Y1.5 Data"
+date: "8/25/2020"
+output: html_document
+---
+
+```{r include=FALSE}
+#necessary libraries
+
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+library(tidyverse)
+library(gridExtra)
+library(readxl)
+library(car)
+library(kimisc)
+library(checkmate)
+library(Hmisc)
+library(zoo)
+library(stats)
+```
+
+```{r warning=FALSE, include=FALSE}
+#reading in the y1.5 data from each school
+
+Daytona <- read_excel("ERAU Daytona COVID-19 Collection Characterizing Engineering Student Me.xlsx")
+
+Prescott <- read_excel("ERAU Prescott COVID-19 Collection Characterizing Engineering Student M.xlsx")
+
+Iowa <- read_excel("Iowa State COVID 19 Collection Characterizing Engineering Student Ment.xlsx")
+
+SDSU <- read_excel("SDSU COVID-19 Collection Characterizing Engineering Student Mental Wel.xlsx")
+
+SJSU <- read_excel("SJSU COVID-19 Collection Characterizing Engineering Student Mental Wel.xlsx")
+
+CPSU <- read_excel("Cal Poly Characterizing Engineering Student Mental Wellness and Its Role i.xlsx")
+
+Milwaukee <- read_excel("UW Milwaukee COVID 19 Collection Characterizing Engineering Student Me (1).xlsx") 
+
+Boulder <- read_excel("CU Boulder COVID-19 Collection Characterizing Engineering Student Ment (1).xlsx")
+```
+
+```{r include=FALSE}
+#combine the y1.5 data sets from each school
+
+dataset <- rbind(Daytona, Prescott,Iowa,SDSU,SJSU,CPSU,Milwaukee,Boulder)
+```
+
+```{r include=FALSE}
+#take out those who declined to participate 
+
+data <- dataset[-c(91,101,159,179),]
+```
+
+```{r include=FALSE}
+#parse_funcs.r
+
+parse.var.yes_no <- data.frame(likert = c("Yes", "No"),
+                     value=c(1,0),stringsAsFactors=FALSE)
+
+parse.var.not_sev_mohalf_ned <- data.frame(likert = c("Not at all", "Several days",
+                                    "More than half the days",
+                                    "Nearly every day"),
+                                    value=c(0,0,1,1),stringsAsFactors=FALSE)
+
+parse.var.not_sev_mohalf <- data.frame(likert = c("Not at all", "Several Days",
+                                                      "More than half the days"),
+                                           value=c(0,0,1),stringsAsFactors=FALSE)
+
+parse.pcptsd <- function(data){
+    lmap <- parse.var.yes_no
+    
+    pcptsd_headers <- grep("pcptsd", names(data), value=TRUE)
+    
+    data <- parse.likert(data=data, header_names=pcptsd_headers, likert_map=lmap)
+    
+    return(data)
+}
+parse.phq.eating <- function(data){
+    lmap <- parse.var.yes_no
+    
+    eating_headers <- c(grep("phq_6", names(data),value=TRUE),grep("phq_7", names(data),value=TRUE),grep("phq_8", names(data),value=TRUE))
+    
+    data <- parse.likert(data=data, header_names=eating_headers, likert_map = lmap)
+    
+    return(data)
+}
+parse.phq.other_anx <- function(data){
+    lmap <- parse.var.not_sev_mohalf
+    
+    other_headers <- grep("phq_5", names(data),value=TRUE)
+    
+    data <- parse.likert(data=data, header_names = other_headers, likert_map = lmap)
+    
+    return(data)
+}
+parse.phq.panic <- function(data){
+    
+    yes_no <- parse.var.yes_no
+    panic_headers <- c(grep("phq_3", names(data),value=TRUE), grep("phq_4", names(data),value=TRUE))
+    
+    data <- parse.likert(data=data,header_names=panic_headers, likert_map=yes_no)
+    
+    return(data)
+}
+parse.phq.dep <- function(data){
+    atoh_score <- parse.var.not_sev_mohalf_ned
+    
+    i_score <- data.frame(likert = c("Not at all", "Several Days",
+                                        "More than half the days",
+                                        "Nearly every day"),
+                          value=c(0,1,1,1),stringsAsFactors=FALSE)
+
+    dep_headers <- grep("phq_2", names(data),value=TRUE)
+    
+    data <- parse.likert(data=data, header_names=dep_headers[1:8],
+                         likert_map=atoh_score)
+    data <- parse.likert(data=data, header_names=dep_headers[9],
+                         likert_map=i_score)
+    
+    return(data)
+}
+parse.kessler <- function(data){
+
+    kesscore <- data.frame(likert = c("All of the time","Most of the time","Some of the time","A little of the time","None of the time"), value=c(4,3,2,1,0),stringsAsFactors = FALSE)
+    #Grab the kessler 6 headings
+    kessler_headers <- kessnames <- grep("_", grep("kessler", names(data), value=TRUE), invert = TRUE, value = TRUE)
+
+    #Copy the relevant kesler rows for manipulation
+    #kesslerdata <- data[kessler_headers]
+
+    data <- parse.likert(data=data, header_names=kessler_headers,
+                         likert_map=kesscore)
+
+    return(data)
+}
+
+parse.likert <- function(data, header_names, likert_map){
+    likertdata <- data[header_names]
+    
+    data[header_names] <- likertdata %>%
+        pivot_longer(cols = header_names,names_to = "lscale",
+                     values_to="likert") %>%
+        left_join(likert_map, by = "likert") %>%
+        mutate(likert=value) %>%
+        select(-value) %>%
+        pivot_wider(names_from = "lscale", values_from="likert",
+                    values_fn = list(likert = list)) %>%
+        unnest(cols=header_names)
+    return(data)
+}
+```
+
+```{r include=FALSE}
+#Kessler Analysis
+
+analysis.kessler <- function(data){
+    data<-parse.kessler(data)
+    #add for major mental health
+    data <- mutate(data,
+                   kessler_major =
+                       ifelse((coalesce.na(kessler1,0)+coalesce.na(kessler2,0)+coalesce.na(kessler3,0)+coalesce.na(kessler4,0)+coalesce.na(kessler5,0)+
+                                coalesce.na(kessler6,0))>=13, 1,
+                               ifelse((coalesce.na(kessler1,4)+coalesce.na(kessler2,4)+coalesce.na(kessler3,4)+coalesce.na(kessler4,4)+coalesce.na(kessler5,4)+
+                                coalesce.na(kessler6,4)) < 13, 0, NA))
+                   )
+    data <- mutate(data,
+                   kessler_moderate =
+                     ifelse(kessler_major, 0, 
+                       ifelse((coalesce.na(kessler1,0)+coalesce.na(kessler2,0)+coalesce.na(kessler3,0)+coalesce.na(kessler4,0)+coalesce.na(kessler5,0)+
+                                coalesce.na(kessler6,0))>=5 & !coalesce.na(kessler_major, TRUE), 1 , ifelse((coalesce.na(kessler1,4)+coalesce.na(kessler2,4)+coalesce.na(kessler3,4)+coalesce.na(kessler4,4)+coalesce.na(kessler5,4)+
+                                coalesce.na(kessler6,4)) < 5, 0, NA)
+                              )
+                       )
+                   )
+    return(data)
+}
+
+data = analysis.kessler(data)
+```
+
+```{r include=FALSE}
+# phq analysis 
+
+analysis.phq.depr <- function(data){
+                                        #Grab phq_2a-2i
+    dep_headers <- grep("phq_2", names(data),value=TRUE)
+    #Parse the data to replace Likert style scores with 1s if they count and 0s
+    #if they don't
+    data <- parse.phq.dep(data)
+    data <- mutate(data,
+                      dep_major = ifelse(
+                      (rowSums(coalesce.na(data[dep_headers[-1:-2]],0))>=5) &
+                       (rowSums(coalesce.na(data[dep_headers[1:2]],0))>=1), 1,
+                      ifelse(rowSums(is.na(data[dep_headers[1:2]])) >= 1 & (rowSums(data[dep_headers[-1:-2]], na.rm = T) + rowSums(is.na(data[dep_headers[-1:-2]]))) >=5, NA, 0)
+                   ))
+                   #if_else(
+                    #   rowSums(is.na(data[dep_headers[-1:-2]]))>=2 |
+                     #      rowSums(is.na(data[dep_headers[1:2]]))==2, NA, 0))
+    data <- mutate(data,
+                      dep_other = ifelse(dep_major!=1, ifelse(
+                      (rowSums(coalesce.na(data[dep_headers[-1:-2]], 0))>=2) &
+                       (rowSums(coalesce.na(data[dep_headers[1:2]],0))>=1), 1 ,
+                       ifelse(rowSums(is.na(data[dep_headers[1:2]])) >= 1 & (rowSums(data[dep_headers[-1:-2]], na.rm = T) + rowSums(is.na(data[dep_headers[-1:-2]]))) >=2, NA, 0)), 0
+                   ))
+    
+    return(data)
+}
+analysis.phq.panic <- function(data){
+    data <- parse.phq.panic(data)
+    
+    panic3_headers <- grep("phq_3", names(data),value=TRUE)
+    panic4_headers <- grep("phq_4", names(data),value=TRUE)
+    data <- data %>% mutate(
+        panic = ifelse(rowSums(coalesce.na(data[panic3_headers],0))==4 & (rowSums(coalesce.na(data[panic4_headers],0))>=4), 1, 
+                       ifelse(rowSums(is.na(data[panic3_headers]))==0, 0, ifelse((rowSums(data[panic4_headers], na.rm = T) + rowSums(is.na(data[panic4_headers]))) >=4,NA, 0)))
+    )
+    
+    return(data)
+}
+analysis.phq.other <- function(data){
+    data <- parse.phq.other_anx(data)
+    other_headers <- grep("phq_5", names(data),value=TRUE)
+    data <- data %>% mutate(
+        other_anxiety = ifelse(data[other_headers[1]] & rowSums(data[other_headers[-1]], na.rm = T)>=3, 1, 
+                                ifelse(rowSums(is.na(data[other_headers[1]])) == 0, 0, ifelse((rowSums(data[other_headers], na.rm = T) + rowSums(is.na(data[other_headers]))), NA, 0)))
+    )
+    
+    return(data)
+}
+analysis.phq.eating <- function(data){
+    data <- parse.phq.eating(data)
+    eating6_headers <- grep("phq_6", names(data), value=TRUE)
+    
+    data <- data %>% mutate(
+        bulimia = if_else(phq_8 & (rowSums(data[eating6_headers], na.rm = T)==3),1,0)
+    )
+    
+    data <- data %>% mutate(
+        bin_eat = ifelse((is.na(phq_8)|phq_8==0)& (rowSums(data[eating6_headers], na.rm = T)==3),1,
+                          ifelse((is.na(phq_8)|phq_8==0)& (rowSums(data[eating6_headers], na.rm = T) + rowSums(is.na(data[eating6_headers][1:3]))) >= 3, NA, 0)
+    ))
+}
+
+data <- analysis.phq.depr(data)
+data <- analysis.phq.panic(data)
+data <- analysis.phq.other(data)
+data <- analysis.phq.eating(data)
+```
+
+```{r include=FALSE}
+#PCPTSD Analysis
+
+analysis.pcptsd <- function(data){
+    data <- parse.pcptsd(data)
+    ptsd_headers <- grep("pcptsd", names(data), value=TRUE)
+    print(head(data[grep("pcptsd", names(data), value=TRUE)]))
+    print(colnames(data))
+    data <- data %>% mutate(ptsd = ifelse(rowSums(data[ptsd_headers], na.rm = T)>=3,1,
+                                           ifelse(rowSums(data[ptsd_headers], na.rm = T) + rowSums(is.na(data[ptsd_headers])) >=3, NA, 0)))
+}
+
+data = analysis.pcptsd(data)
+
+mhw.results.summarize <- function(data){
+  race_gender <- with(data, aggregate(list(kessler_major=kessler_major, kessler_moderate=kessler_moderate, dep_major=dep_major, dep_other=dep_other, panic=panic, other_anxiety=other_anxiety,bulimia=bulimia,bin_eat=bin_eat,ptsd=ptsd),list(race=race, gender=gender), mean, na.rm=TRUE))
+  race_gender_filtered<-filter_all(.tbl=race_gender,.vars_predicate=all_vars(!is.nan(.) & .!=1))
+  #write.csv(x=cp_race_gender_filtered, file="~/mhw_analysis/calpoly_data/cp_race_gender.csv", row.names=FALSE)
+  gender_sex <- with(data, aggregate(list(kessler_major=kessler_major, kessler_moderate=kessler_moderate, dep_major=dep_major, dep_other=dep_other, panic=panic, other_anxiety=other_anxiety,bulimia=bulimia,bin_eat=bin_eat,ptsd=ptsd),list(gender=gender, sexuality=sexuality), mean, na.rm=TRUE))
+  gender_sex_filtered <- filter_all(.tbl=gender_sex,.vars_predicate=all_vars(!is.nan(.) & .!=1))
+  #write.csv(x=cp_gender_sex_filtered, file="~/mhw_analysis/calpoly_data/cp_gender_sex.csv", row.names=FALSE)
+  
+  return(list(rg=race_gender, rgf=race_gender_filtered, gs=gender_sex, gsf=gender_sex_filtered))
+}
+
+
+```
+
+```{r include=FALSE}
+#read in the precovid data 
+
+precovid <- read_excel("precovid.xls")
+```
+
+```{r include=FALSE}
+precovid$gender = relevel(precovid$gender, "Male")
+precovid$race= relevel(precovid$race, "White")
+precovid$type = relevel(precovid$type, "public")
+precovid$sexuality = relevel(precovid$sexuality, "Heterosexual")
+precovid$international = relevel(precovid$international, "No")
+precovid$armed_forces = relevel(precovid$armed_forces, "No")
+precovid$parents_edu = relevel(precovid$parents_edu, "Bachelor’s degree")
+```
+
+```{r include=FALSE}
+#only use respondents shown in both the precovid and y1.5 data 
+
+precovid <- precovid %>%
+filter(uid %in% c("11347132420",
+"11347686789","11347571718","11392090397","11347312441","11347731596","11347129947","11347312098","11347142768","11347446287","11389519287","11347479209","11390329043","11391656092","11151592764","11144281287","11346780684","11147866030","11144311784","11336621732","11150066463","11154936258","11144357685","11142327584","11142321442","11142203900","11006064565","11142274793","11142224278","11142204398","11145131424","11005926956","11142334739","11005927827","11005938728","11142317048","11142229508","11145665427","11143045638","11142361586","11142400813","11154613621","11142513921","11142204793","11142549584","11143150591","11005948349","11142635873","11144849850","11142302163","11145850025","11006125266","11142235074","11389525562","11390097857","11342682467","11389435057","11342707442","11389770639","11342513496","11342611487","11342635460","11391437759","11342552029","11342734561","11342746268","11389813179","11342518123","11342533557","11374529094","11379877298","11373784945","11373955939","11374137315","11373822986","11374845245","11374077685","11380076885","11373866144","11373774516","11377581043","11373785482","11373787470","11374275782","11373775014","11374545317","11373993141","11373784019","11167062587","11167046638","11168883064","11167104519","11174258690","11169103504","11167246027","11169327838","11167348229","11167310693","11167868517","11167051190","11168024264","11167388137","11179455241","11167109542","11167651366","11167513285","11170988697","11167069375","11167058316","11167337872","11173437223","11167183612","11167174668","11167614081","11167328037","11167453881","11168048683","11169392240","11167050254","11167198900","11167053507","11168878892","11167267708","11184992602","11169083460","11167187858","11167782504","11167389779","11189351635","11167115248","11170269088","11167093764","11167771560","11167190267","11167425509","11167052944","11169048310","11329125016","11329172064","11329323249","11338498362","11329090090","11329245699","11331152623","11329441539","11352183835","11141710238","11010477608","11010446878","11010783285","11141588550","11389519585"))
+```
+
+```{r include=FALSE}
+#only use respondents shown in both the precovid and y1.5 data 
+
+data <- data %>%
+  filter(`Respondent ID` %in% c("11558200986","11556747583","11556136322","11554429093","11553973829","11553169854","11552880872","11552863024","11552829555","11552679460","11552455687","11552271808","11552261571","11552257124","11609881751","11602745854","11554273921","11554269180","11552920148","11552676211","11552408932","11552309463","11552304571","11623860980","11610879329","11610608032","11602946693","11602719010","11602417348","11602363671","11588116117","11556310802","11552206435","11552200959","11552169765","11551990366","11551975649","11551951190","11551946112","11551887078","11551883582","11551868822","11551865917","11551848815","11551810123","11551800943","11551765058","11551741186","11551711236","11551693258","11551615680","11551607468","11551597922","11557935873","11556593353","11556188511","11555255426","11554124184","11553302599","11553170206","11552512400","11552462985","11552374876","11552252733","11552238525","11552233241","11552232420","11552197933","11552191059","11552178728","11616938782","11610101381","11608743955","11607912124","11607017109","11602562506","11602244047","11592552426","11559155017","11554177882","11552734113","11552531058","11552415190","11552366756","11552347608","11552338930","11552300485","11552291412","11552273421","11608499239","11605988910","11605724602","11603876006","11603829640","11603287464","11603286578","11602582808","11602559251","11602516442","11602507568","11602498373","11602483490","11602455014","11602428599","11602426630","11602416120","11602415502","11602414403","11552478929","11548200352","11547820418","11546620885","11546467574","11546412255","11546340659","11546253129","11546162895","11545895376","11545737238","11544680563","11544660640","11544594246","11544561430","11544512560","11544510770","11544459425","11544321111","11544297619","11544249265","11544228709","11544176313","11544147648","11544142064","11544125870","11544121629","11544106677","11544091705","11544089959","11606184695","11604112921","11554304691","11552907968","11552731949","11552702726","11552522766","11552266019","11552242637","11602436769","11602423874","11549618751","11548726576","11548329853"))
+
+```
+
+```{r include=FALSE}
+#rearrange ids in the precovid data and y1.5 data so the respondent's demographics are going to the same person when we add it to the y1.5 data 
+
+x <- c("11558200986","11556747583","11556136322","11554429093","11553973829","11553169854","11552880872","11552863024","11552829555","11552679460","11552455687","11552271808","11552261571","11552257124","11609881751","11602745854","11554273921","11554269180","11552920148","11552676211","11552408932","11552309463","11552304571","11623860980","11610879329","11610608032","11602946693","11602719010","11602417348","11602363671","11588116117","11556310802","11552206435","11552200959","11552169765","11551990366","11551975649","11551951190","11551946112","11551887078","11551883582","11551868822","11551865917","11551848815","11551810123","11551800943","11551765058","11551741186","11551711236","11551693258","11551615680","11551607468","11551597922","11557935873","11556593353","11556188511","11555255426","11554124184","11553302599","11553170206","11552512400","11552462985","11552374876","11552252733","11552238525","11552233241","11552232420","11552197933","11552191059","11552178728","11616938782","11610101381","11608743955","11607912124","11607017109","11602562506","11602244047","11592552426","11559155017","11554177882","11552734113","11552531058","11552415190","11552366756","11552347608","11552338930","11552300485","11552291412","11552273421","11608499239","11605988910","11605724602","11603876006","11603829640","11603287464","11603286578","11602582808","11602559251","11602516442","11602507568","11602498373","11602483490","11602455014","11602428599","11602426630","11602416120","11602415502","11602414403","11552478929","11548200352","11547820418","11546620885","11546467574","11546412255","11546340659","11546253129","11546162895","11545895376","11545737238","11544680563","11544660640","11544594246","11544561430","11544512560","11544510770","11544459425","11544321111","11544297619","11544249265","11544228709","11544176313","11544147648","11544142064","11544125870","11544121629","11544106677","11544091705","11544089959","11606184695","11604112921","11554304691","11552907968","11552731949","11552702726","11552522766","11552266019","11552242637","11602436769","11602423874","11549618751","11548726576","11548329853")
+
+data <- data %>%
+  mutate(`Respondent ID` =  factor(`Respondent ID`, levels = x)) %>%
+  arrange(`Respondent ID`)   
+
+y <- c("11347132420",
+"11347686789","11347571718","11392090397","11347312441","11347731596","11347129947","11347312098","11347142768","11347446287","11389519287","11347479209","11390329043","11391656092","11151592764","11144281287","11346780684","11147866030","11144311784","11336621732","11150066463","11154936258","11144357685","11142327584","11142321442","11142203900","11006064565","11142274793","11142224278","11142204398","11145131424","11005926956","11142334739","11005927827","11005938728","11142317048","11142229508","11145665427","11143045638","11142361586","11142400813","11154613621","11142513921","11142204793","11142549584","11143150591","11005948349","11142635873","11144849850","11142302163","11145850025","11006125266","11142235074","11389525562","11390097857","11342682467","11389435057","11342707442","11389770639","11342513496","11389519585","11342611487","11342635460","11391437759","11342552029","11342734561","11342746268","11389813179","11342518123","11342533557","11374529094","11379877298","11373784945","11373955939","11374137315","11373822986","11374845245","11374077685","11380076885","11373866144","11373774516","11377581043","11373785482","11373787470","11374275782","11373775014","11374545317","11373993141","11373784019","11167062587","11167046638","11168883064","11167104519","11174258690","11169103504","11167246027","11169327838","11167348229","11167310693","11167868517","11167051190","11168024264","11167388137","11179455241","11167109542","11167651366","11167513285","11170988697","11167069375","11167058316","11167337872","11173437223","11167183612","11167174668","11167614081","11167328037","11167453881","11168048683","11169392240","11167050254","11167198900","11167053507","11168878892","11167267708","11184992602","11169083460","11167187858","11167782504","11167389779","11189351635","11167115248","11170269088","11167093764","11167771560","11167190267","11167425509","11167052944","11169048310","11329125016","11329172064","11329323249","11338498362","11329090090","11329245699","11331152623","11329441539","11352183835","11141710238","11010477608","11010446878","11010783285","11141588550")
+
+precovid <- precovid %>%
+  mutate(uid =  factor(uid, levels = y)) %>%
+  arrange(uid)
+```
+
+```{r include=FALSE}
+#add demographics to the Y1.5 data
+
+data <- data %>%
+bind_cols(precovid['gender'])
+data <- data %>%
+bind_cols(precovid['age'])
+data <- data %>%
+bind_cols(precovid['race'])
+data <- data %>%
+bind_cols(precovid['sexuality'])
+data <- data %>%
+bind_cols(precovid['mhw_condition'])
+data <- data %>%
+bind_cols(precovid['international'])
+data <- data %>%
+bind_cols(precovid['type'])
+data <- data %>%
+bind_cols(precovid['parents_edu'])
+data <- data %>%
+bind_cols(precovid['armed_forces'])
+data <- data %>%
+bind_cols(precovid['mhw_in_treatment'])
+data <- data %>%
+bind_cols(precovid['learning_dis'])
+data <- data %>%
+bind_cols(precovid['physical_dis'])
+```
+#### Age
+***18-20 vs. 21+***
+```{r echo=FALSE}
+#18-20 year olds
+age1 <- data %>%
+  filter(age %in% c("18","19","20"))
+#143 observations
+
+#21+ year olds
+age2 <- data %>%
+  filter(age %in% c("21","22","23","24","25","26","27","28","29","30","31","32","33","34","35"))
+#only 5 21+ year olds (22,27,21,25,24)
+
+#not a big enough sample to compare traditional first and second year age vs. nontraditional
+#for the following regressions, only looking at 18-20 year olds
+data <- data %>%
+  filter(age %in% c("18","19","20"))
+```
+
+#### P-values and Linear Regression Models
+
+Before using a regression model, you have to ensure that it is statistically significant.
+
+The summary statistics tells us a number of things. One of them is the model p-Value (bottom last line) and the p-Value of individual predictor variables (extreme right column under ‘Coefficients’). The p-Values are very important because, we can consider a linear model to be statistically significant only when both these p-Values are less that the pre-determined statistical significance level, which is ideally 0.05. This is visually interpreted by the significance stars at the end of the row. The more the stars beside the variable’s p-Value, the more significant the variable.
+
+***Linear regression model predicting Kessler Major with some demographic variables***
+```{r echo=FALSE}
+#Linear regression model predicting Kessler Major with some deomgraphic variables 
+
+model = lm(kessler_major ~ gender + age + race + mhw_condition + mhw_in_treatment ,data =data)
+summary(model)
+```
+
+***Linear regression model predicting Kessler Moderate with some demographic variables***
+```{r echo=FALSE}
+#Linear regression model predicting Kessler Moderate with some deomgraphic variables 
+
+model = lm(kessler_moderate ~ gender + age + race + mhw_condition + mhw_in_treatment ,data =data)
+summary(model)
+```
+
+***Linear regression model predicting Major Depressive Disorder with some demographic variables***
+```{r echo=FALSE}
+#Linear regression model predicting Major Depressive Disorder with some deomgraphic variables 
+
+model = lm(dep_major ~ gender + age + race + mhw_condition + mhw_in_treatment ,data =data)
+summary(model)
+```
+
+***Linear regression model predicting Other Depressive Disorder with some demographic variables***
+```{r echo=FALSE}
+#Linear regression model predicting Other Depressive Disorder with some deomgraphic variables 
+
+model = lm(dep_other ~ gender + age + race + mhw_condition + mhw_in_treatment ,data =data)
+summary(model)
+```
+
+***Linear regression model predicting Panic Disorder with some demographic variables***
+```{r echo=FALSE}
+#Linear regression model predicting Panic Disorder with some deomgraphic variables 
+
+model = lm(panic ~ gender + age + race + mhw_condition + mhw_in_treatment ,data =data)
+summary(model)
+```
+
+***Linear regression model predicting Other Anxiety Disorder with some demographic variables***
+```{r echo=FALSE}
+#Linear regression model predicting Other Anxiety Disorder with some deomgraphic variables 
+
+model = lm(other_anxiety ~ gender + age + race + mhw_condition + mhw_in_treatment ,data =data)
+summary(model)
+```
+
+***Linear regression model predicting Bulimia with some demographic variables***
+```{r echo=FALSE}
+#Linear regression model predicting Bulimia with some deomgraphic variables 
+
+model = lm(bulimia ~ gender + age + race + mhw_condition + mhw_in_treatment ,data =data)
+summary(model)
+```
+
+***Linear regression model predicting Binary Eating Disorder with some demographic variables***
+```{r echo=FALSE}
+#Linear regression model predicting Binary Eating Disorder with some deomgraphic variables 
+
+model = lm(bin_eat ~ gender + age + race + mhw_condition + mhw_in_treatment ,data =data)
+summary(model)
+```
+
+***Linear regression model predicting PTSD with some demographic variables***
+```{r echo=FALSE}
+#Linear regression model predicting PTSD with some deomgraphic variables 
+
+model = lm(ptsd ~ gender + age + race + mhw_condition + mhw_in_treatment ,data =data)
+summary(model)
+```
+
+#### Welch Two Sample t-test
+
+T-tests are used to determine whether the means of two groups are equal to each other. A widely used modification of the t-test is Welch's t-test. It adjusts the number of degrees of freedom when the variances are thought not to be equal to each other. 
+
+#### Tukey Multiple Comparisons of Means
+Pairwise comparisons are methods for analyzing multiple population means in pairs to determine whether they are significantly different from one another. Therefore, we use this method when looking at the demographics Race and Sexuality. 
+
+***Welch Two Sample t-test for Kessler Major and Gender***
+```{r echo=FALSE}
+data_sub_gender = data %>%
+  filter(gender == "Male" | gender=="Female")
+t.test(kessler_major~ gender,data = data_sub_gender)
+```
+The p-value suggests that there is strong evidence of a significant difference in Kessler Major between males and females.  
+
+***Welch Two Sample t-test for Kessler Major and Type of School***
+```{r echo=FALSE}
+t.test(kessler_major ~ type,data = data)
+```
+The p-value suggests that there is strong evidence of a significant difference in Kessler Major between students at public and private schools. 
+
+***Welch Two Sample t-test for Kessler Major and US and International Students***
+```{r echo=FALSE}
+t.test(kessler_major ~ international,data = data)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Kessler Major between students in the US and international students.
+
+***Welch Two Sample t-test for Kessler Major and MHW Condition***
+```{r echo=FALSE}
+data_sub_mhw_condition= data %>%
+  filter(mhw_condition == "Yes" | mhw_condition == "No")
+t.test(kessler_major ~ mhw_condition,data = data_sub_mhw_condition)
+```
+The p-value suggests that there is strong evidence of a significant difference in Kessler Major between students with and without mh conditions. 
+
+***Tukey Multiple Comparisons of Means for Kessler Major and Race***
+```{r echo=FALSE}
+race_anova = aov(kessler_major ~ race, data = data)
+summary(race_anova)
+TukeyHSD(race_anova)
+
+```
+Nothing is significant here. 
+
+***Tukey Multiple Comparisons of Means for Kessler Major and Sexuality***
+```{r echo=FALSE}
+sexuality_anova = aov(kessler_major ~ sexuality, data = data)
+summary(sexuality_anova)
+TukeyHSD(sexuality_anova)
+
+```
+Heterosexual-Bisexual is barely pairwise significant with a p-value of 0.0559. 
+
+***Welch Two Sample t-test for Kessler Moderate and Gender***
+```{r echo=FALSE}
+data_sub_gender = data %>%
+  filter(gender == "Male" | gender=="Female")
+t.test(kessler_moderate~ gender,data = data_sub_gender)
+```
+The p-value suggests that there is strong evidence of a significant difference in Kessler Moderate between males and females.
+
+***Welch Two Sample t-test for Kessler Moderate and Type of School***
+```{r echo=FALSE}
+t.test(kessler_moderate ~ type,data = data)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Kessler Moderate between students at public and private schools. 
+
+***Welch Two Sample t-test for Kessler Moderate and US or International Student***
+```{r echo=FALSE}
+t.test(kessler_moderate ~ international,data = data)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Kessler Moderate between students in the US and international students.
+
+***Welch Two Sample t-test for Kessler Moderate and MHW Condition***
+```{r echo=FALSE}
+data_sub_mhw_condition= data %>%
+  filter(mhw_condition == "Yes" | mhw_condition == "No")
+t.test(kessler_moderate ~ mhw_condition,data = data_sub_mhw_condition)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Kessler Moderate between students with and without mh conditions. 
+
+***Tukey Multiple Comparisons of Means for Kessler Moderate and Race***
+```{r echo=FALSE}
+race_anova = aov(kessler_moderate ~ race, data = data)
+summary(race_anova)
+TukeyHSD(race_anova)
+
+```
+Nothing is significant here. 
+
+***Tukey Multiple Comparisons of Means for Kessler Moderate and Sexuality***
+```{r echo=FALSE}
+sexuality_anova = aov(kessler_moderate ~ sexuality, data = data)
+summary(sexuality_anova)
+TukeyHSD(sexuality_anova)
+
+```
+Nothing is significant here. 
+
+***Welch Two Sample t-test for Major Depressive Disorder and Gender***
+```{r echo=FALSE}
+data_sub_gender = data %>%
+  filter(gender == "Male" | gender=="Female")
+t.test(dep_major~ gender,data = data_sub_gender)
+```
+The p-value suggests that there is strong evidence of a significant difference in Major Depressive Disorder between males and females.
+
+***Welch Two Sample t-test for Major Depressive Disorder and Type of School***
+```{r echo=FALSE}
+t.test(dep_major ~ type,data = data)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Major Depressive Disorder between students at public and private schools. 
+
+***Welch Two Sample t-test for Major Depressive Disorder and US or International Student***
+```{r echo=FALSE}
+t.test(dep_major ~ international,data = data)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Major Depressive Disorder between students in the US and international students.
+
+***Welch Two Sample t-test for Major Depressive Disorder and MHW Condition***
+```{r echo=FALSE}
+data_sub_mhw_condition= data %>%
+  filter(mhw_condition == "Yes" | mhw_condition == "No")
+t.test(dep_major ~ mhw_condition,data = data_sub_mhw_condition)
+```
+The p-value suggests that there is just enough evidence of a significant difference in Major Depressive Disorder between students with and without mh conditions. 
+
+***Tukey Multiple Comparisons of Means for Major Depressive Disorder and Race***
+```{r echo=FALSE}
+race_anova = aov(dep_major ~ race, data = data)
+summary(race_anova)
+TukeyHSD(race_anova)
+
+```
+Nothing is significant here. 
+
+***Tukey Multiple Comparisons of Means for Major Depressive Disorder and Sexuality***
+```{r echo=FALSE}
+sexuality_anova = aov(dep_major ~ sexuality, data = data)
+summary(sexuality_anova)
+TukeyHSD(sexuality_anova)
+
+```
+Nothing is significant here. 
+
+***Welch Two Sample t-test for Other Depressive Disorder and Gender***
+```{r echo=FALSE}
+data_sub_gender = data %>%
+  filter(gender == "Male" | gender=="Female")
+t.test(dep_other~ gender,data = data_sub_gender)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Other Depressive Disorder between males and females.
+
+***Welch Two Sample t-test for Other Depressive Disorder and Type of School***
+```{r echo=FALSE}
+t.test(dep_other ~ type,data = data)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Other Depressive Disorder between students at public and private schools. 
+
+***Welch Two Sample t-test for Other Depressive Disorder and US or International Student***
+```{r echo=FALSE}
+t.test(dep_other ~ international,data = data)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Other Depressive Disorder between students in the US and international students.
+
+***Welch Two Sample t-test for Other Depressive Disorder and MHW Condition***
+```{r echo=FALSE}
+data_sub_mhw_condition= data %>%
+  filter(mhw_condition == "Yes" | mhw_condition == "No")
+t.test(dep_other ~ mhw_condition,data = data_sub_mhw_condition)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Other Depressive Disorder between students with and without mh conditions. 
+
+***Tukey Multiple Comparisons of Means for Other Depressive Disorder and Race***
+```{r echo=FALSE}
+race_anova = aov(dep_other ~ race, data = data)
+summary(race_anova)
+TukeyHSD(race_anova)
+
+```
+Nothing is significant here. 
+
+***Tukey Multiple Comparisons of Means for Other Depressive Disorder and Sexuality***
+```{r echo=FALSE}
+sexuality_anova = aov(dep_other ~ sexuality, data = data)
+summary(sexuality_anova)
+TukeyHSD(sexuality_anova)
+
+```
+Nothing is significant here. 
+
+***Welch Two Sample t-test for Panic Disorder and Gender***
+```{r echo=FALSE}
+data_sub_gender = data %>%
+  filter(gender == "Male" | gender=="Female")
+t.test(panic ~ gender,data = data_sub_gender)
+```
+The p-value suggests that there is strong evidence of a significant difference in Panic Disorder between males and females.
+
+***Welch Two Sample t-test for Panic Disorder and Type of School***
+```{r echo=FALSE}
+t.test(panic ~ type,data = data)
+```
+The p-value suggests that there is strong evidence of a significant difference in Panic Disorder between students at public and private schools. 
+
+***Welch Two Sample t-test for Panic Disorder and US or International Student***
+```{r echo=FALSE}
+t.test(panic ~ international,data = data)
+```
+The p-value suggests that there is strong evidence of a significant difference in Panic Disorder between students in the US and international students.
+
+***Welch Two Sample t-test for Panic Disorder and MHW Condition***
+```{r echo=FALSE}
+data_sub_mhw_condition= data %>%
+  filter(mhw_condition == "Yes" | mhw_condition == "No")
+t.test(panic ~ mhw_condition,data = data_sub_mhw_condition)
+```
+The p-value suggests that there is strong evidence of a significant difference in Panic Disorder between students with and without mh conditions. 
+
+***Tukey Multiple Comparisons of Means for Panic Disorder and Race***
+```{r echo=FALSE}
+race_anova = aov(panic ~ race, data = data)
+summary(race_anova)
+TukeyHSD(race_anova)
+
+```
+Nothing is significant here. 
+
+***Tukey Multiple Comparisons of Means for Panic Disorder and Sexuality***
+```{r echo=FALSE}
+sexuality_anova = aov(panic ~ sexuality, data = data)
+summary(sexuality_anova)
+TukeyHSD(sexuality_anova)
+
+```
+Nothing is significant here. 
+
+***Welch Two Sample t-test for Other Anxiety Disorder and Gender***
+```{r echo=FALSE}
+data_sub_gender = data %>%
+  filter(gender == "Male" | gender=="Female")
+t.test(other_anxiety ~ gender,data = data_sub_gender)
+```
+The p-value suggests that there is strong evidence of a significant difference in Other Anxiety Disorder between males and females.
+
+***Welch Two Sample t-test for Other Anxiety Disorder and Type of School***
+```{r echo=FALSE}
+t.test(other_anxiety ~ type,data = data)
+```
+The p-value suggests that there is strong evidence of a significant difference in Other Anxiety Disorder between students at public and private schools. 
+
+***Welch Two Sample t-test for Other Anxiety Disorder and US or International Student***
+```{r echo=FALSE}
+t.test(other_anxiety ~ international,data = data)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Other Anxiety Disorder between students in the US and international students.
+
+***Welch Two Sample t-test for Other Anxiety Disorder and MHW Condition***
+```{r echo=FALSE}
+data_sub_mhw_condition= data %>%
+  filter(mhw_condition == "Yes" | mhw_condition == "No")
+t.test(other_anxiety ~ mhw_condition,data = data_sub_mhw_condition)
+```
+The p-value suggests that there is strong evidence of a significant difference in Other Anxiety Disorder between students with and without mh conditions. 
+
+***Tukey Multiple Comparisons of Means for Other Anxiety Disorder and Race***
+```{r echo=FALSE}
+race_anova = aov(other_anxiety ~ race, data = data)
+summary(race_anova)
+TukeyHSD(race_anova)
+
+```
+Nothing is significant here. 
+
+***Tukey Multiple Comparisons for Other Anxiety Disorder and Sexuality***
+```{r echo=FALSE}
+sexuality_anova = aov(other_anxiety ~ sexuality, data = data)
+summary(sexuality_anova)
+TukeyHSD(sexuality_anova)
+
+```
+Heterosexual-Another sexual orientation, please specify is pairwise significant with a low p-value of 0.03. Heterosexual-Bisexual is also pairwise significant with a low p-value of 0.04.
+
+***Welch Two Sample t-test for Bulimia and Gender***
+```{r echo=FALSE}
+data_sub_gender = data %>%
+  filter(gender == "Male" | gender=="Female")
+t.test(bulimia ~ gender,data = data_sub_gender)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Bulimia between males and females.
+
+***Welch Two Sample t-test for Bulimia and Type of School***
+```{r echo=FALSE}
+t.test(bulimia ~ type,data = data)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Bulimia between students at public and private schools. 
+
+```{r echo=FALSE}
+#t.test(bulimia ~ international,data = data)
+#grouping factor does not have 2 levels so can not test
+```
+
+***Welch Two Sample t-test for Bulimia and MHW Condition***
+```{r echo=FALSE}
+data_sub_mhw_condition= data %>%
+  filter(mhw_condition == "Yes" | mhw_condition == "No")
+t.test(bulimia ~ mhw_condition,data = data_sub_mhw_condition)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Bulimia between students with and without mh conditions. 
+
+***Tukey Multiple Comparisons of Means for Bulimia and Race***
+```{r echo=FALSE}
+race_anova = aov(bulimia ~ race, data = data)
+summary(race_anova)
+TukeyHSD(race_anova)
+
+```
+Nothing is significant here. 
+
+***Tukey Multiple Comparisons of Means for Bulimia and Sexuality***
+```{r echo=FALSE}
+sexuality_anova = aov(bulimia ~ sexuality, data = data)
+summary(sexuality_anova)
+TukeyHSD(sexuality_anova)
+
+```
+Nothing is significant here. 
+
+***Welch Two Sample t-test for Binary Eating Disorder and Gender***
+```{r echo=FALSE}
+data_sub_gender = data %>%
+  filter(gender == "Male" | gender=="Female")
+t.test(bin_eat ~ gender,data = data_sub_gender)
+```
+The p-value suggests that there is strong evidence of a significant difference in Binary Eating Disorder between males and females.
+
+***Welch Two Sample t-test for Binary Eating Disorder and Type of School***
+```{r echo=FALSE}
+t.test(bin_eat ~ type,data = data)
+```
+The p-value suggests that there is strong evidence of a significant difference in Binary Eating Disorder between students at public and private schools. 
+
+***Welch Two Sample t-test for Binary Eating Disorder and US or International Student***
+```{r echo=FALSE}
+t.test(bin_eat ~ international,data = data)
+```
+The p-value suggests that there is strong evidence of a significant difference in Binary Eating Disorder between students in the US and international students.
+
+***Welch Two Sample t-test for Binary Eating Disorder and MHW Condition***
+```{r echo=FALSE}
+data_sub_mhw_condition= data %>%
+  filter(mhw_condition == "Yes" | mhw_condition == "No")
+t.test(bin_eat ~ mhw_condition,data = data_sub_mhw_condition)
+```
+The p-value suggests that there is not enough evidence of a significant difference in Binary Eating Disorder between students with and without mh conditions.
+
+***Tukey Multiple Comparisons of Means for Binary Eating Disorder and Race***
+```{r echo=FALSE}
+race_anova = aov(bin_eat ~ race, data = data)
+summary(race_anova)
+TukeyHSD(race_anova)
+
+```
+Nothing is significant here. 
+
+***Tukey Multiple Comparisons of Means for Binary Eating Disorder and Sexuality***
+```{r echo=FALSE}
+sexuality_anova = aov(bin_eat ~ sexuality, data = data)
+summary(sexuality_anova)
+TukeyHSD(sexuality_anova)
+
+```
+Nothing is significant here. 
+
+***Welch Two Sample t-test for PTSD and Gender***
+```{r echo=FALSE}
+data_sub_gender = data %>%
+  filter(gender == "Male" | gender=="Female")
+t.test(ptsd ~ gender,data = data_sub_gender)
+```
+The p-value suggests that there is not enough evidence of a significant difference in PTSD between males and females.
+
+***Welch Two Sample t-test for PTSD and Type of School***
+```{r echo=FALSE}
+t.test(ptsd ~ type,data = data)
+```
+The p-value suggests that there is not enough evidence of a significant difference in PTSD between students at public and private schools. 
+
+***Welch Two Sample t-test for PTSD and US or International Student***
+```{r echo=FALSE}
+t.test(ptsd ~ international,data = data)
+```
+The p-value suggests that there is not enough evidence of a significant difference in PTSD between students in the US and international students.
+
+***Welch Two Sample t-test for PTSD and MHW Condition***
+```{r echo=FALSE}
+data_sub_mhw_condition= data %>%
+  filter(mhw_condition == "Yes" | mhw_condition == "No")
+t.test(ptsd ~ mhw_condition,data = data_sub_mhw_condition)
+```
+The p-value suggests that there is not enough evidence of a significant difference in PTSD between students with and without mh conditions. 
+
+***Tukey Multiple Comparisons of Means for PTSD and Race***
+```{r echo=FALSE}
+race_anova = aov(ptsd ~ race, data = data)
+summary(race_anova)
+TukeyHSD(race_anova)
+
+```
+Nothing is significant here. 
+
+***Tukey Multiple Comparisons for PTSD and Sexuality***
+```{r echo=FALSE}
+sexuality_anova = aov(ptsd ~ sexuality, data = data)
+summary(sexuality_anova)
+TukeyHSD(sexuality_anova)
+
+```
+Nothing is significant here. 
