@@ -399,12 +399,12 @@ diagnoses2 = test_data %>%
   gather(key = "diagnosis", "proportion", 1:6)
 
 ggplot(data = diagnoses, aes(x =diagnosis , y = proportion)) + 
-    geom_bar(aes(fill = diagnosis), position = "dodge", stat="identity") + 
+    geom_bar( position = "dodge", stat="identity") + 
     theme(axis.text.x = element_text(angle = 45, hjust=1), legend.position = "none") +
     labs(title = "Proportion of respondents with each MH Diagnosis", x = "Diagnoses", y = "Proportion")
 
 ggplot(data = diagnoses2, aes(x =diagnosis , y = proportion)) + 
-    geom_bar(aes(fill = diagnosis), position = "dodge", stat="identity") + 
+    geom_bar(position = "dodge", stat="identity") + 
     theme(axis.text.x = element_text(angle = 45, hjust=1), legend.position = "none") +
     labs(title = "Proportion of respondents with each MH Diagnosis", x = "Diagnoses", y = "Proportion")
 
@@ -875,6 +875,7 @@ lastcol = which(colnames(test_data)=="eating_change")
 covid_experiences = test_data[, c(firstcol:lastcol)] %>%
   mutate_all(function(x) ifelse(x!=0, 1, 0))
 #cor(covid_experiences)
+
 formattable(as.data.frame(cor(covid_experiences)), list(formatter("span"),
   `metric` = formatter("span", style = ~ style(color = "grey",font.weight = "bold","border-radius" = "0px")), 
                      area(col = -1) ~ function(x) percent(x / 100, digits = 0),
@@ -984,7 +985,7 @@ comorbid_diagnosis_with= function(var){
   
   ggplot(var_data, aes(x = reorder(diagnosis, -proportion), y = proportion)) + 
     geom_bar(stat="identity") + 
-    labs(title = paste("Proportion of Respondents With Different MH Diagnoses Who had '", var, "'"))
+    labs(title = paste("Proportion of Respondents With Different MH Diagnoses Who had '", var, "'"), x = "Diagnoses", y = "Proportion")
 }
 
 ```
