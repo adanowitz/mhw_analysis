@@ -80,7 +80,7 @@ ggplot(data = both_data2, aes(x= diagnosis, y = Proportion)) +
   geom_bar(aes(fill = pre_post_covid), position = "dodge", stat="identity") + 
   theme(axis.text.x = element_text(angle = 45, hjust=1)) +
   labs(title = "Proportion of MH Diagnoses Before and After COVID", x = "Diagnoses", fill= "Pre/Post Covid") 
-  
+ggsave("MH_prevpost_covid.png")
 ```
 
 The largest differences between pre and post covid is in the number of dep_major cases, with fewer than 10% of respondents screening positive before covid, and almost 30% screening positive after.
@@ -99,6 +99,7 @@ ggplot(data = both_data_gender, aes(x= diagnosis, y = Proportion)) +
   geom_bar(aes(fill = pre_post_covid), position = "dodge", stat="identity") + 
   theme(axis.text.x = element_text(angle = 45, hjust=1)) +
   labs(title = "Proportion of MH Diagnoses Before and After COVID", x = "Diagnoses", fill= "Pre/Post Covid") +facet_grid(gender ~ .) 
+ggsave("MH_prevpost_covid_gender.png")
 ```
 
 It seems the difference of males reporting depression, and in-particular major depression was much greater in the post-covid data. 
@@ -116,6 +117,7 @@ ggplot(data = both_data_race, aes(x= diagnosis, y = Proportion)) +
   geom_bar(aes(fill = pre_post_covid), position = "dodge", stat="identity") + 
   theme(axis.text.x = element_text(angle = 45, hjust=1)) +
   labs(title = "Proportion of MH Diagnoses Before and After COVID", x = "Diagnoses", fill= "Pre/Post Covid") +facet_grid(race ~ .) 
+ggsave("MH_prevpost_covid_race.png")
 ```
 
 

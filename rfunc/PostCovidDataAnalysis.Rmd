@@ -182,6 +182,8 @@ ggplot(experience_freq, aes(x = experience, y = freq)) +
   theme(axis.text.x = element_text(angle = 45, hjust=1, size = 11)) + 
   geom_bar(stat="identity") + 
   labs(title = "Frequency of Different Experiences Students Have Had Post-Covid", x = "Experience", y = "Freq")
+
+ggsave("experience_freq.png")
 ```
 
 Social change was the most commonly reported experience, and forclosure was the most least reported experience.
@@ -221,6 +223,7 @@ Distribution of all new stress scores, most common scores are around 75-100.
 ggplot(test_data, aes(x=new_stress)) +
   geom_histogram() + 
   labs(title = "Distribution of New Stress Scores", x = "New Stress Score", y = "Freq")
+ggsave("new_stress_dist.png")
 ```
 
 
@@ -233,6 +236,7 @@ ggplot(test_data_gender, aes(x=new_stress)) +
   labs(title = "Distribution of New Stress Scores By Gender", x = "New Stress Score", y = "Freq") +
   facet_grid(gender ~ .) +
   theme(strip.text.y = element_text(size=6, angle=0))
+ggsave("new_stress_dist_gender.png")
 ```
 
 Distribution of all new stress scores by race. Some African American respondents have experienced extremely high amounts of stress, and for the number of observations of Hispanic respondents there are a high proportion of respondents in this group with higher than average stress scores.
@@ -242,6 +246,7 @@ ggplot(test_data, aes(x=new_stress)) +
   labs(title = "Distribution of New Stress Scores By Race", x = "New Stress Score", y = "Freq") +
   facet_grid(race ~ .)+
   theme(strip.text.y = element_text(size=6, angle=0))
+ggsave("new_stress_dist_race.png")
 ```
 
 
@@ -253,6 +258,7 @@ ggplot(test_data_internationals, aes(x=new_stress)) +
   labs(title = "Distribution of New Stress Scores By International/Not International", x = "New Stress Score", y = "Freq") +
   facet_grid(international ~ .)+
   theme(strip.text.y = element_text(size=6, angle=0))
+ggsave("new_stress_dist_international.png")
 ```
 
 
@@ -264,6 +270,7 @@ ggplot(test_data_internationals, aes(x=new_stress)) +
   labs(title = "Distribution of New Stress Scores By Public School/Private School", x = "New Stress Score", y = "Freq") +
   facet_grid(public_private ~ .)+
   theme(strip.text.y = element_text(size=6, angle=0))
+ggsave("new_stress_dist_pubpriv.png")
 ```
 
 
@@ -302,6 +309,7 @@ data_sub_gender = test_data %>%
 
 t.test(new_stress ~ gender,data = data_sub_gender)
 visualize_new_stress_dist(data_sub_gender, "gender")
+ggsave("new_stress_box_gender.png")
 ```
 
 
@@ -311,6 +319,7 @@ The p-value suggests that there is not evidence of a significant difference in n
 ```{r}
 t.test(new_stress ~ public_private,data = test_data_public_private)
 visualize_new_stress_dist(test_data_public_private, "public_private")
+ggsave("new_stress_box_pubpriv.png")
 ```
 
 The p-value suggests that there is strong evidence of a significant difference in new stress between students at public and private schools.
@@ -321,6 +330,7 @@ internatonal_data = test_data %>%
   filter(international == "Yes" | international=="No")
 t.test(new_stress ~ international,data = internatonal_data)
 visualize_new_stress_dist(internatonal_data , "international")
+ggsave("new_stress_box_international.png")
 ```
 
 The p-value suggests that there is strong evidence of a significant difference in new stress between students at in the US and international students.
@@ -333,6 +343,7 @@ data_sub_mhw_condition= test_data %>%
 
 t.test(new_stress ~ mhw_condition,data = data_sub_mhw_condition)
 visualize_new_stress_dist(data_sub_mhw_condition, "mhw_condition")
+ggsave("new_stress_box_mhw_cond.png")
 ```
 
 
@@ -346,6 +357,7 @@ summary(race_anova)
 
 TukeyHSD(race_anova)
 visualize_new_stress_dist(test_data, "race")
+ggsave("new_stress_box_race.png")
 ```
 
 Pairwise Significant 
@@ -402,12 +414,13 @@ ggplot(data = diagnoses, aes(x =diagnosis , y = proportion)) +
     geom_bar( position = "dodge", stat="identity") + 
     theme(axis.text.x = element_text(angle = 45, hjust=1), legend.position = "none") +
     labs(title = "Proportion of respondents with each MH Diagnosis", x = "Diagnoses", y = "Proportion")
+ggsave("each_diag_MH.png")
 
 ggplot(data = diagnoses2, aes(x =diagnosis , y = proportion)) + 
     geom_bar(position = "dodge", stat="identity") + 
     theme(axis.text.x = element_text(angle = 45, hjust=1), legend.position = "none") +
     labs(title = "Proportion of respondents with each MH Diagnosis", x = "Diagnoses", y = "Proportion")
-
+ggsave("each_diag_MH_aggregated.png")
 ```
 
 
@@ -434,6 +447,7 @@ process_grouped = function(data, var){
     labs(title = paste("Proportion of respondents of each ", var, " with each MH Diagnosis"), x = capitalize(var), y = "Proportion")
   
   print(plot1)
+  ggsave(paste("grouped_diag_", var, ".png"))
   
   plot2 = ggplot(data = grouped_stress, aes_string(x = var, y = "new_stress")) +
     geom_bar(stat="identity")+ 
@@ -659,6 +673,7 @@ Native Hawaiian or Other Pacific Islander respondents are the group with the hig
 
 ```{r}
 depression_analysis(test_data, "race")
+ggsave("dep_analysis_race.png")
 ```
 ```{r}
 depression_analysis(test_data_gender, "gender")
@@ -695,6 +710,7 @@ food_housing_security_analysis = function(data, var){
     scale_fill_discrete(name = "Housing Security")
   
   print(plot1)
+  ggsave(paste("group_house_",var, ".png"))
   
   plot2 = ggplot(data = grouped_food, aes_string(x = var, y = "proportion")) + 
     geom_bar(aes(fill = str_wrap(food_security_situation, 30)), position = "dodge", stat="identity") + 
@@ -703,7 +719,7 @@ food_housing_security_analysis = function(data, var){
     scale_fill_discrete(name = "Food Security")
   
   print(plot2)
-  
+  ggsave(paste("group_food_",var, ".png"))
   return(grouped_housing)
 
 }
@@ -994,24 +1010,28 @@ More than a quarter of respondents with dep_any also screened positive for ptsd.
 
 ```{r}
 comorbid_diagnosis_with("dep_any")
+ggsave("diff_MH_w_dep_any.png")
 ```
 
 More than half of respondents with bin_eat also screened positive for dep_any. 
 
 ```{r}
 comorbid_diagnosis_with("bin_eat")
+ggsave("diff_MH_w_bin_eat.png")
 ```
 
 More than half of respondents with anx_any also screened positive for dep_any. 
 
 ```{r}
 comorbid_diagnosis_with("anx_any")
+ggsave("diff_MH_w_anx_any.png")
 ```
 
 More than half of respondents with bulimia also screened positive for dep_any. 
 
 ```{r}
 comorbid_diagnosis_with("bulimia")
+ggsave("diff_MH_w_bulimia.png")
 ```
 
 
@@ -1019,6 +1039,7 @@ More than half of respondents with ptsd also screened positive for dep_any.
 
 ```{r}
 comorbid_diagnosis_with("ptsd")
+ggsave("diff_MH_w_ptsd.png")
 ```
 
 About a quarter of respondents with kessler_any also screened positive for ptsd. 
