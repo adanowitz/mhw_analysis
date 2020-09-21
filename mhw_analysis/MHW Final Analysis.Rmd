@@ -1,0 +1,167 @@
+---
+title: "mhw analysis redo"
+author: "Rachel Castellino"
+date: "8/13/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(readr)
+library(ggplot2)
+library(cowplot)
+library(dplyr)
+library(readxl)
+library(lattice)
+library(tidyverse)
+data <- read_csv("survey_data.csv")
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+data$gender = as.factor(data$gender)
+data$gender = relevel(data$gender, ref = "Male")
+
+data$sexuality = as.factor(data$sexuality)
+data$sexuality = relevel(data$sexuality, ref = "Heterosexual")
+
+data$race = as.factor(data$race)
+data$race = relevel(data$race, ref = "White")
+
+data$major = as.factor(data$major)
+data$major = relevel(data$major, ref = "Mechanical Engineering")
+
+data$parents_edu = as.factor(data$parents_edu)
+data$parents_edu = relevel(data$parents_edu, ref = "Bachelor’s degree")
+
+data$armed_forces = as.factor(data$armed_forces)
+data$armed_forces = relevel(data$armed_forces, ref = "No")
+
+data$international = as.factor(data$international)
+data$international = relevel(data$international, ref = "No")
+
+data$type = as.factor(data$type)
+data$type = relevel(data$type, ref = "public")
+
+data$college = as.factor(data$college)
+data$learning_dis = as.factor(data$learning_dis)
+data$physical_dis = as.factor(data$physical_dis)
+data$mhw_condition = as.factor(data$mhw_condition)
+data$mhw_in_treatment = as.factor(data$mhw_in_treatment)
+```
+
+```{r}
+col_order <- c("X1", "belief_in_grad", "uid", "year_in_program", "age", "gender", "race", "sexuality", "learning_dis", "physical_dis", "mhw_condition", "mhw_in_treatment", "parents_edu", "armed_forces", "international","type", "college", "kessler_major", "kessler_moderate", "dep_major", "dep_other", "panic","other_anxiety", "bulimia","bin_eat", "ptsd")
+
+data <- data[, col_order]
+print(data)
+colnames(data)
+```
+
+```{r}
+explnames = names(data)[5:17]
+responsenames = names(data)[18:26]
+responsenames
+```
+
+```{r}
+#single variables
+g <- expand.grid(responsenames, explnames)
+fun=function(y, x) {
+  z <- glm(formula(paste(y, '~', x)), family=binomial(link='logit'), data=data)
+  return(z)
+}
+fit <- data.frame(list(mapply(fun, g[[1]], g[[2]])))
+```
+
+```{r}
+names(fit) <- responsenames
+
+for (m in fit){
+  obj = structure(m, class = 'glm')
+  val = (anova(obj, test = 'Chisq'))$'Pr(>Chi)'[2]
+  if (val < 0.05){
+    print(paste("Response of below model is experiencing", names(m$model)[1], 'tested against', names(m$model)[2]))
+    test_sum = summary(obj)
+    cat("overall model p value", val, "\n")
+    more_likely = names(which(test_sum$coeff[-1,4] <= 0.05 & test_sum$coeff[-1, 1] > 0))
+    pvalues = ((test_sum$coeff[-1,4][which(test_sum$coeff[-1,4] <= 0.05)]))
+    cat("The significant variables in the model:", more_likely, "with p value(s) in respective order:", pvalues, "\n")
+  }
+}
+
+```
+
+```{r}
+#multiple variable analysis
+data <- data %>% 
+  mutate(kessler_comb = as.numeric(case_when(
+    ((kessler_major == 1 | kessler_moderate == 1) ~ '1'), 
+    ((kessler_major == 0 & (kessler_moderate == 0)) ~ '0')))) 
+  
+    
+data <- data %>% 
+  mutate(dep_comb = as.numeric(case_when(
+    ((dep_major == 1 | dep_other == 1) ~ '1'), 
+    ((dep_major == 0 & (dep_other == 0)) ~ '0'))))
+    
+data <- data %>% 
+  mutate(anx_comb = as.numeric(case_when(
+    ((other_anxiety == 1 | panic == 1) ~ '1'), 
+    ((other_anxiety == 0 & (panic == 0)) ~ '0'))))
+    
+data <- data %>% 
+  mutate(eat_comb = as.numeric(case_when(
+    ((bulimia == 1 | bin_eat == 1) ~ '1'), 
+    ((bulimia == 0 & (bin_eat == 0)) ~ '0'))))
+```
+
+```{r}
+#multiple variable analysis
+new_data <- data %>% 
+  filter(!is.na(kessler_comb)) %>% 
+  filter(!is.na(dep_comb)) %>% 
+  filter(!is.na(anx_comb)) %>% 
+  filter(!is.na(eat_comb))
+
+```
+
+```{r}
+explnames = names(data)[5:17]
+responsenames_new = names(new_data)[27:30]
+
+
+g <- expand.grid(responsenames_new, explnames)
+fun=function(y, x) {
+  z <- glm(formula(paste(y, '~', x)), family=binomial(link='logit'), data=data)
+  return(z)
+}
+
+new_fit <- data.frame(list(mapply(fun, g[[1]], g[[2]])))
+```
+
+```{r}
+for (m in new_fit){
+  obj = structure(m, class = 'glm')
+  val = (anova(obj, test = 'Chisq'))$'Pr(>Chi)'[2]
+  if (val < 0.05){
+    print(paste("Response of below model is experiencing", names(m$model)[1], 'tested against', names(m$model)[2]))
+    test_sum = summary(obj)
+    cat("overall model p value", val, "\n")
+    more_likely = names(which(test_sum$coeff[-1,4] <= 0.05 & test_sum$coeff[-1, 1] > 0))
+    pvalues = ((test_sum$coeff[-1,4][which(test_sum$coeff[-1,4] <= 0.05)]))
+    cat("The significant variables in the model:", more_likely, "with p value(s) in respective order:", pvalues, "\n")
+  }
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
