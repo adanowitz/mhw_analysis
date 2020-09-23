@@ -36,6 +36,9 @@ both_data = rbind(post_df, pre_df) %>%
   mutate(anx_any = ifelse(other_anxiety ==1 |panic ==1, 1, 0))
 both_data$pre_post_covid = relevel(as.factor(both_data$pre_post_covid), "pre")
 ```
+
+
+
 ## T-tests 
 T-tests are conducted to see if there was a significant difference between the number of cases of each of the positive mental health screenings before and after the onset of COVID-19.
 ```{r}
@@ -83,7 +86,7 @@ ggplot(data = both_data2, aes(x= diagnosis, y = Proportion)) +
 ggsave("MH_prevpost_covid.png")
 ```
 
-The largest differences between pre and post covid is in the number of dep_major cases, with fewer than 10% of respondents screening positive before covid, and almost 30% screening positive after.
+The largest differences between pre and post covid is in the number of dep_major cases, with fewer than 10% of respondents screening positive before covid, and almost 20% screening positive after.
 
 ## Demographics and Pre/Post-COVID
 ```{r}
@@ -119,6 +122,10 @@ ggplot(data = both_data_race, aes(x= diagnosis, y = Proportion)) +
   labs(title = "Proportion of MH Diagnoses Before and After COVID", x = "Diagnoses", fill= "Pre/Post Covid") +facet_grid(race ~ .) 
 ggsave("MH_prevpost_covid_race.png")
 ```
+
+
+
+
 
 
 
