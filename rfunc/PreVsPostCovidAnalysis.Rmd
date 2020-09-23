@@ -124,7 +124,29 @@ ggsave("MH_prevpost_covid_race.png")
 ```
 
 
+Double checking pre-to-post-covid depression difference
+```{r}
+both_data %>% 
+  group_by(pre_post_covid, dep_major) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) 
+```
 
+
+
+```{r}
+both_data %>% 
+  group_by(pre_post_covid, dep_other) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) 
+```
+
+```{r}
+both_data %>% 
+  group_by(pre_post_covid, dep_any) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) 
+```
 
 
 
