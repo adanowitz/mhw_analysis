@@ -851,6 +851,29 @@ SankeyDiagram(housing_food[, c(-3)],
 ```
 
 
+## Regressions Predicting Food and Housing Security
+```{r}
+test_data$food_insecurity_general = ifelse(test_data$food_security_situation == "As a result of COVID-19 and the response to it, I am now experiencing food insecurity" | test_data$food_security_situation =="I already experienced food insecurity, but COVID-19 has made it worse", 1, 0)
+
+test_data$housing_insecurity_general = ifelse(test_data$housing_security_situation == "As a result of COVID-19 and the response to it, I am now experiencing housing insecurity" | test_data$food_security_situation =="I already experienced housing insecurity, but COVID-19 has made it worse", 1, 0)
+```
+
+
+
+```{r}
+model = glm(housing_insecurity_general ~ gender + age + race + mhw_condition + mhw_in_treatment + sexuality + international + parents_edu + public_private + armed_forces + learning_dis + physical_dis + year_in_program, family=binomial(link='logit') ,data = test_data)
+
+summary(model)
+```
+
+```{r}
+model = glm(food_insecurity_general ~ gender + age + race + mhw_condition + mhw_in_treatment + sexuality + international + parents_edu + public_private + armed_forces + learning_dis + physical_dis + year_in_program, family=binomial(link='logit'),data = test_data)
+
+summary(model)
+```
+
+
+
 ## Access Quesitons
 ```{r}
 access_to_instruction_analysis = function(data, var){
